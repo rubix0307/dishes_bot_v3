@@ -41,14 +41,6 @@ def get_advertisement(id: int, offset: int) -> types.InlineQueryResultArticle:
         
         )
 
-def get_callback_data_by_dict(data: dict):
-    return keyboard_data_markup_menu.new(
-        id = data.get('id'),
-        fav = data.get('fav'),
-        view = data.get('view'),
-        query = data.get('query'),
-        menu = data.get('menu'),
-    )
 
 class Article:
 
