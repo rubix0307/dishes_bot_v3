@@ -1,6 +1,7 @@
 import pymysql.cursors
 from config import db_user, db_password
 
+br = '\n'
 def get_connect(database='bot'):
     return pymysql.connect(host='localhost',
                              user=db_user,
@@ -32,7 +33,7 @@ def get_ingredients_data_from_id(id: int):
 
     query = f'''SELECT ingredients.title, dishes_ingredients.value FROM dishes_ingredients 
         JOIN ingredients ON ingredients.id = dishes_ingredients.ingredient_id
-        WHERE dishes_ingredients.dish_id = {id}'''
+        WHERE dishes_ingredients.dish_id = {id}'''.replace(br, '')
 
     return '\n'.join([f'{i["title"]}: {i["value"]}' for i in sql(query)])
 
@@ -40,7 +41,7 @@ def get_categories_data_from_id(id: int):
 
     query = f'''SELECT categories.title FROM `dishes_categories`
         JOIN categories ON category_id = id
-        WHERE dish_id = {id}'''
+        WHERE dish_id = {id}'''.replace(br, '')
 
     return ', '.join([f'{i["title"]}' for i in sql(query)]).capitalize()
 
@@ -49,7 +50,6 @@ def get_photos_data_from_id(id: int):
     query = f'''SELECT `url` FROM `photos` WHERE dish_id = {id}'''
 
     return [i['url'].replace('c88x88', '900x-') for i in sql(query)]
-
 
 
 

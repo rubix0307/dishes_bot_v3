@@ -8,4 +8,5 @@ from functions import get_home_page
 async def main_def(message: types.Message):
     user = message.from_user
     data = get_home_page(user)
+    await message.delete()
     await message.answer(data['text'], reply_markup=data['markup'])

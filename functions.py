@@ -1,10 +1,13 @@
+import time
 from aiogram import types
 from aiogram.types.inline_keyboard import (InlineKeyboardButton,
                                            InlineKeyboardMarkup)
 from aiogram.utils.markdown import *
-from config import BOT_URL
-from db.functions import get_fav_dish_by_user
 
+from config import BOT_URL
+from db.functions import (get_categories_data_from_id, get_fav_dish_by_user,
+                          get_ingredients_data_from_id,
+                          get_photos_data_from_id)
 from markups import *
 
 br = '\n'
@@ -30,13 +33,22 @@ def get_advertisement(id: int, offset: int) -> types.InlineQueryResultArticle:
             id=id*-1,
             title=f'Ваша реклама',
             thumb_url=f'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQ4qwp5h7c3KcNSnOImf64Dz1_bf_6ysZ6tQ&usqp=CAU',
-            description=f'Заказать рекламу можно тут',
+            description=f'№ {id}/{offset + 1} | Заказать рекламу можно тут',
             
             input_message_content=types.InputTextMessageContent(
-                message_text=f'''Реклама №{id}{br}{f'Страница №{offset}' if offset else ''}''',
+                message_text=f'''Реклама №{id}{br}{f'Страница №{offset+1}'}''',
                 parse_mode='html'),
         
         )
+
+def get_callback_data_by_dict(data: dict):
+    return keyboard_data_markup_menu.new(
+        id = data.get('id'),
+        fav = data.get('fav'),
+        view = data.get('view'),
+        query = data.get('query'),
+        menu = data.get('menu'),
+    )
 
 class Article:
 
@@ -53,8 +65,7 @@ class Article:
 
         self.categories = data['categories']
         self.ingredients = data['ingredients']
-        self.photo = data['photos'][0] if len(data['photos']) > 0 else 'https://upload.wikimedia.org/wikipedia/commons/9/9a/%D0%9D%D0%B5%D1%82_%D1%84%D0%BE%D1%82%D0%BE.png'
-        self.photos = data['photos']
+        self.preview = data['preview']
 
         self.show_recipe_instructions = show_recipe_instructions
     
@@ -62,9 +73,10 @@ class Article:
         return f'Порций: {self.serving} | {self.cooking_time} | {self.kilocalories} ккал{br}{self.categories}' if self.id > 0 else '😢'
 
     def get_message_text(self):
-        message_text = f'''{hide_link(self.photo)}
+        message_text = f'''{hide_link(self.preview)}
             {self.title}
-            {hcode(self.get_description())}
+            {self.get_description()}
+            {hcode(f'*калорийность для сырых продуктов')}
 
             {self.ingredients}
 
@@ -72,49 +84,84 @@ class Article:
 
             {hlink(f'Больше рецептов ищу ТУТ', BOT_URL)}
         ''' 
-        return message_text.replace(' '*12,'').replace(br*4, br*2) if self.id > 0 else 'Похоже тут ничего не найдено'
+        return message_text.replace(' '*12,'').replace(br*4, br*2) if self.id > 0 else 'Похоже, тут ничего не найдено'
 
-    def get_markup(self, fav, query_text: str = ''):
+    def get_markup(self, fav_ids, query: types.InlineQuery):
         
+        callback_data = {
+            'id': self.id,
+            'fav': 0,
+            'view': 0,
+            'query': '',
+            'menu': 'home',
+        }
+
+
+
+        if self.id in fav_ids:
+            callback_data.update({'fav': 0,})
+        else:
+            callback_data.update({'fav': 1,})
+
+        if not self.show_recipe_instructions:
+            callback_data.update({'view': 1,})    
+        else:
+            callback_data.update({'view': 0,})
+
+
+        callback_data.update({'query': query.query,})
+
+
         markup = InlineKeyboardMarkup()
-        other_recipes = InlineKeyboardButton(text=f'🗂 Другие блюда', switch_inline_query_current_chat=query_text if query_text else '')
-        main_page = InlineKeyboardButton(text=f'🏡 На главную', callback_data=show_menu.new(menu_name='home'))
+        other_recipes = InlineKeyboardButton(text=f'🗂 Другие блюда', switch_inline_query_current_chat=callback_data.get('query'))
+        main_page = InlineKeyboardButton(text=f'🏡 На главную', callback_data=show_menu.new(
+            menu_name = 'home'
+        ))
 
+        if not self.id < 1:
 
-        if  not self.id == -1:
-
-            if fav:
-                fav_ids = [item['id'] for item in fav]
-            else:
-                fav_ids = []
 
             if self.id in fav_ids:
                 edit_fav = InlineKeyboardButton(text=f'♥️ Убрать из избранного',
-                    callback_data=edit_fav_by_id_call_menu.new(id=self.id, is_add=0)
+                    callback_data=edit_fav_by_id_call_menu.new(
+                        id = callback_data.get('id'),
+                        fav = callback_data.get('fav'),
+                        view = callback_data.get('view'),
+                        query = callback_data.get('query'),
+                        menu = callback_data.get('menu'),
+                    )
                 )
             else:
                 edit_fav = InlineKeyboardButton(text=f'🤍 В избранное',
-                    callback_data=edit_fav_by_id_call_menu.new(id=self.id, is_add=1)
+                    callback_data=edit_fav_by_id_call_menu.new(
+                        id = callback_data.get('id'),
+                        fav = callback_data.get('fav'),
+                        view = callback_data.get('view'),
+                        query = callback_data.get('query'),
+                        menu = callback_data.get('menu'),
+                    )
                 )
                 
             if not self.show_recipe_instructions:
                 show_recipe = InlineKeyboardButton(text=f'🧾 Показать рецепт', callback_data=get_by_id_call_menu.new(
-                    id=self.id,
-                    view=1,
+                    id = callback_data.get('id'),
+                    fav = callback_data.get('fav'),
+                    view = callback_data.get('view'),
+                    query = callback_data.get('query'),
+                    menu = callback_data.get('menu'),
                 ))         
             else:
                 show_recipe = InlineKeyboardButton(text=f'📃 Скрыть рецепт', callback_data=get_by_id_call_menu.new(
-                    id=self.id,
-                    view=0,
+                    id = callback_data.get('id'),
+                    fav = callback_data.get('fav'),
+                    view = callback_data.get('view'),
+                    query = callback_data.get('query'),
+                    menu = callback_data.get('menu'),
                 ))
 
-            other_recipes = InlineKeyboardButton(text=f'🗂 Другие блюда', switch_inline_query_current_chat=query_text if query_text else '')
-            main_page = InlineKeyboardButton(text=f'🏡 На главную', callback_data=show_menu.new(menu_name='home'))
-
-
-           
             markup.add(edit_fav)
             markup.add(show_recipe, other_recipes)
+
             markup.add(main_page)
         
         else:
@@ -122,30 +169,86 @@ class Article:
         
         return markup
 
-    def get_inline_query_result(self, fav, query_text: str = '') -> types.InlineQueryResultArticle:
+    def get_inline_query_result(self, fav, query: types.InlineQuery) -> types.InlineQueryResultArticle:
         return types.InlineQueryResultArticle(
 
             id= self.id,
             title= self.title,
-            thumb_url= self.photo,
+            thumb_url= self.preview,
             description= self.get_description(),
             
             input_message_content=types.InputTextMessageContent(
                 message_text= self.get_message_text(),
                 parse_mode='html',
                 ),
-            reply_markup= self.get_markup(fav, query_text),
+            reply_markup= self.get_markup(fav, query),
         
         )
-
 
 def get_inline_reslt(query: types.InlineQuery, data_list):
 
     fav = get_fav_dish_by_user(query.from_user.id)
-    answer = [Article(item, False).get_inline_query_result(fav, query.query) for item in data_list]
+    answer = []
     
+    for item in data_list:
+        try:
+            answer.append(Article(item, False).get_inline_query_result(fav, query))
+        except Exception as ex:
+            continue
     
     # ad block
-    for i in range(0, len(answer) + 1, 10):
-        answer.insert(i, get_advertisement(i, query.offset))
+    offset = int(query.offset) if query.offset else 0
+    for round, i in enumerate(range(0, len(answer) + 1, 10)):
+        answer.insert(i, get_advertisement(round + 1, offset))
     return answer
+
+def get_extra_data(data_list):
+
+    remove_list = []
+    for round, data in enumerate(data_list):
+        try:
+            categories = get_categories_data_from_id(data['id'])
+            ingredients = get_ingredients_data_from_id(data['id'])
+            photos = get_photos_data_from_id(data['id'])
+            new = {
+                'categories': categories,
+                'ingredients': ingredients,
+                'photos': photos,
+                }
+
+            data_list[round].update(new)
+        except:
+            remove_list.append(data)
+            continue
+
+    for i in remove_list:
+        data_list.remove(i)
+
+    return data_list
+
+
+
+
+def get_blank_data(id=-1, title='К сожалению, ничего не найдено', photo='https://sitechecker.pro/wp-content/uploads/2017/12/404.png'):
+    data_list = [{
+            'id': id,
+            'title':title,
+            'link':' ',
+            'photo':photo,
+            'category':' ',
+            'count_ingredients':' ',
+            'serving':' ',
+            'cooking_time':' ',
+            'kilocalories':0,
+            'protein':0,
+            'fats':0,
+            'carbohydrates':0,
+            'list_ingredients':' ',
+            'recipe':' ',
+            'rating':0,
+            'categories': [],
+            'ingredients': [],
+            'photos': [photo],
+        }]
+    return data_list
+
