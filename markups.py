@@ -22,7 +22,7 @@ edit_fav_by_id_call_menu.prefix = 'edit_fav'
 
 
 filters = {
-    'favourites': 'favourites',
+    'favorites': 'favorites',
     'top-day': 'top-day',
     'category': 'c=',
 }

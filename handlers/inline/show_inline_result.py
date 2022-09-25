@@ -32,7 +32,7 @@ async def main(query: types.InlineQuery):
     start = offset * max_dishes -1 if offset else 0
     
 
-    if filters['favourites'] in query_text:
+    if filters['favorites'] in query_text:
         data_list_time = time.time()
 
         sql_query = f'''SELECT dishes.* FROM dishes RIGHT JOIN fav_dish_user ON fav_dish_user.user_id = {user.id} AND fav_dish_user.dish_id = dishes.id WHERE 1'''.replace(br, '')

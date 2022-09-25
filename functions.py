@@ -7,9 +7,9 @@ from aiogram.utils.markdown import *
 from config import BOT_URL
 from db.functions import (get_categories_data_from_id, get_fav_dish_by_user,
                           get_ingredients_data_from_id,
-                          get_photos_data_from_id)
+                          get_photos_data_from_id, sql)
 from markups import *
-
+from app import bot
 br = '\n'
 
 
@@ -17,7 +17,7 @@ def get_home_page(user) -> dict:
 
     text = 'Добро пожаловать в бот'
     markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton(text=f'♥️ Избранное', switch_inline_query_current_chat=filters['favourites']))
+    markup.add(InlineKeyboardButton(text=f'♥️ Избранное', switch_inline_query_current_chat=filters['favorites']))
     markup.add(InlineKeyboardButton(text=f'🗂 По категориям', callback_data=show_menu.new(menu_name='categories')))
     markup.add(InlineKeyboardButton(text=f'🌍 Кухни мира 🌎', callback_data=show_menu.new(menu_name='country-cuisines')))
     markup.add(InlineKeyboardButton(text=f'🧾 Показать все рецепты', switch_inline_query_current_chat=''))
@@ -161,7 +161,7 @@ class Article:
         
         return markup
 
-    def get_inline_query_result(self, fav, query: types.InlineQuery) -> types.InlineQueryResultArticle:
+    def get_inline_query_result(self, fav_ids, query: types.InlineQuery) -> types.InlineQueryResultArticle:
         return types.InlineQueryResultArticle(
 
             id= self.id,
@@ -173,18 +173,17 @@ class Article:
                 message_text= self.get_message_text(),
                 parse_mode='html',
                 ),
-            reply_markup= self.get_markup(fav, query),
+            reply_markup= self.get_markup(fav_ids, query),
         
         )
 
 def get_inline_reslt(query: types.InlineQuery, data_list):
-
-    fav = get_fav_dish_by_user(query.from_user.id)
+    fav_ids = [data_id['id'] for data_id in get_fav_dish_by_user(query.from_user.id)]
     answer = []
     
     for item in data_list:
         try:
-            answer.append(Article(item, False).get_inline_query_result(fav, query))
+            answer.append(Article(item, False).get_inline_query_result(fav_ids, query))
         except Exception as ex:
             continue
     
@@ -243,4 +242,56 @@ def get_blank_data(id=-1, title='К сожалению, ничего не най
             'photos': [photo],
         }]
     return data_list
+
+
+async def update_last_message(message: types.Message, castom_message_id = None):
+
+    user = message.from_user
+
+
+    if not castom_message_id:
+        message_id = message.message_id
+    else:
+        message_id = castom_message_id
+
+    last_message = sql(f'SELECT message_id FROM users_messages WHERE user_id = {user.id}')
+    
+    if not len(last_message):
+        sql(f'INSERT INTO `users_messages`(`user_id`, `message_id`) VALUES ({user.id},{message_id})', commit=True)
+        last_message = [{'message_id': message_id}]
+
+    elif not message_id == last_message[0]['message_id']:
+        try:
+            await bot.delete_message(
+                    chat_id=user.id,
+                    message_id=last_message[0]['message_id']
+                )
+        finally:
+            sql(f'UPDATE users_messages SET message_id={message_id} WHERE user_id = {user.id}', commit=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

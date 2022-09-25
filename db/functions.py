@@ -26,8 +26,19 @@ def sql(sql:str, database='bot', commit=False):
     except Exception as ex:
         return False
 
-def get_fav_dish_by_user(user_id):
-    return sql(f'SELECT `dish_id` AS id FROM `fav_dish_user` WHERE user_id = {user_id}')
+def get_fav_dish_by_user(user_id, is_get_fav_ids = False):
+    fav_data = sql(f'SELECT `dish_id` AS id FROM `fav_dish_user` WHERE user_id = {user_id}')
+    if not is_get_fav_ids:
+        return fav_data
+
+    else:
+
+        try:
+            fav_ids = [data_id['id'] for data_id in fav_data]
+        except:
+            fav_ids = []
+        finally:
+            return fav_ids
 
 def get_ingredients_data_from_id(id: int):
 
