@@ -10,16 +10,16 @@ from db.functions import (get_categories_data_from_id, get_fav_dish_by_user,
                           get_photos_data_from_id, sql)
 from markups import *
 from app import bot
-br = '\n'
+
 
 
 def get_home_page(user) -> dict:
 
     text = 'Добро пожаловать в бот'
-    markup = InlineKeyboardMarkup(row_width=2)
+    markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(text=f'♥️ Избранное', switch_inline_query_current_chat=filters['favorites']))
-    markup.add(InlineKeyboardButton(text=f'🗂 По категориям', callback_data=show_menu.new(menu_name='categories')))
-    markup.add(InlineKeyboardButton(text=f'🌍 Кухни мира 🌎', callback_data=show_menu.new(menu_name='country-cuisines')))
+    markup.add(InlineKeyboardButton(text=f'🗂 По категориям', callback_data=show_menu.new(menu_name=call_filters['categories'])))
+    markup.add(InlineKeyboardButton(text=f'🌍 Кухни мира 🌎', callback_data=show_menu.new(menu_name=call_filters['countries'])))
     markup.add(InlineKeyboardButton(text=f'🧾 Показать все рецепты', switch_inline_query_current_chat=''))
 
     return {
@@ -85,7 +85,7 @@ class Article:
             'fav': 0,
             'view': 0,
             'query': '',
-            'menu': 'home',
+            'menu': call_filters['home'],
         }
 
 
@@ -107,7 +107,7 @@ class Article:
         markup = InlineKeyboardMarkup()
         other_recipes = InlineKeyboardButton(text=f'🗂 Другие блюда', switch_inline_query_current_chat=callback_data.get('query'))
         main_page = InlineKeyboardButton(text=f'🏡 На главную', callback_data=show_menu.new(
-            menu_name = 'home'
+            menu_name = call_filters['home']
         ))
 
         if not self.id < 1:
@@ -270,6 +270,23 @@ async def update_last_message(message: types.Message, castom_message_id = None):
             sql(f'UPDATE users_messages SET message_id={message_id} WHERE user_id = {user.id}', commit=True)
 
 
+def get_call_data(callback_data: dict) -> dict:
+    # use base_markup_menu
+    return {
+        'id': int(callback_data.get('id')),
+        'fav': int(callback_data.get('fav')),
+        'view': int(callback_data.get('view')),
+        'query': callback_data.get('query'),
+        'menu': callback_data.get('menu'),
+    }
+
+def get_fav_ids(user_id: int) -> list:
+
+    fav = get_fav_dish_by_user(user_id)
+    fav = fav if fav else []
+    fav_ids = [item['id'] for item in fav]
+
+    return fav_ids
 
 
 
@@ -283,13 +300,19 @@ async def update_last_message(message: types.Message, castom_message_id = None):
 
 
 
+def get_alphabet_sort(sorting_list: list):
+    for letter_number in range(min([len(i) for i in sorting_list])):
 
+        for round in range(len(sorting_list)):
+            for i in range(len(sorting_list) - 1):
 
-
-
-
-
-
+                if not letter_number:
+                    if ord(sorting_list[round][letter_number]) < ord(sorting_list[i][letter_number]):
+                        sorting_list[round], sorting_list[i] = sorting_list[i], sorting_list[round]
+                else:
+                    if ord(sorting_list[round][letter_number]) < ord(sorting_list[i][letter_number]) and ord(sorting_list[round][0]) == ord(sorting_list[i][0]):
+                        sorting_list[round], sorting_list[i] = sorting_list[i], sorting_list[round]
+    return sorting_list
 
 
 

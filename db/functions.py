@@ -1,7 +1,7 @@
 import pymysql.cursors
 from config import db_user, db_password
+from markups import br
 
-br = '\n'
 def get_connect(database='bot'):
     return pymysql.connect(host='localhost',
                              user=db_user,
@@ -46,7 +46,7 @@ def get_ingredients_data_from_id(id: int):
         JOIN ingredients ON ingredients.id = dishes_ingredients.ingredient_id
         WHERE dishes_ingredients.dish_id = {id}'''.replace(br, '')
 
-    return '\n'.join([f'{i["title"]}: {i["value"]}' for i in sql(query)])
+    return br.join([f'{i["title"]}: {i["value"]}' for i in sql(query)])
 
 def get_categories_data_from_id(id: int):
 

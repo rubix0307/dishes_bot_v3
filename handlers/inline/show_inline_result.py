@@ -3,34 +3,26 @@ import time
 
 from aiogram import types
 from app import dp
-from db.functions import (get_categories_data_from_id, get_fav_dish_by_user,
-                          get_ingredients_data_from_id,
-                          get_photos_data_from_id, sql)
-from functions import get_blank_data, get_extra_data, get_inline_reslt
-from markups import filters
+from db.functions import (sql)
+from functions import get_blank_data, get_inline_reslt
+from markups import filters, br
 from aiogram.utils.markdown import *
 
 
-
-br = '\n'
-
 @dp.inline_handler()
 async def main(query: types.InlineQuery):
-    
+
     start_time = time.time()
 
-    query_text = query.query
     user = query.from_user
+    query_text = query.query
+
     offset = int(query.offset or 0)
 
-    # print(f'{offset=} | {query.from_user.id}')
-    # print(f'{query_text}')
-    
     cache_time = 5
     max_value_page = 45
-    max_dishes =  max_value_page if offset else max_value_page - 1
-    start = offset * max_dishes -1 if offset else 0
-    
+    max_dishes = max_value_page if offset else max_value_page - 1
+    start = offset * max_dishes - 1 if offset else 0
 
     if filters['favorites'] in query_text:
         data_list_time = time.time()
@@ -39,12 +31,13 @@ async def main(query: types.InlineQuery):
         data_list = sql(sql_query)
 
         data_list_time_end = time.time()
-    
+
     elif filters['category'] in query_text:
         data_list_time = time.time()
 
         cat_name = query_text.split(filters['category'])[1]
-        filter = sql(f'SELECT id FROM categories WHERE title LIKE "%{cat_name}%"')
+        filter = sql(
+            f'SELECT id FROM categories WHERE title LIKE "%{cat_name}%"')
         sql_query = f'''
             SELECT dishes.* FROM dishes
             LEFT JOIN dishes_categories ON dishes_categories.dish_id = dishes.id
@@ -52,17 +45,19 @@ async def main(query: types.InlineQuery):
             WHERE dishes_categories.category_id = {filter[0]['id']} 
             ORDER BY likes
             LIMIT {start},{max_dishes}
-        '''.replace(br,'')
+        '''.replace(br, '')
 
         data_list = sql(sql_query)
-        data_list_time_end = time.time()    
-    
+        data_list_time_end = time.time()
+
     else:
         data_list_time = time.time()
 
-        data_list = sql(f'SELECT * FROM dishes WHERE MATCH (title) AGAINST ("{query_text}") LIMIT {start},{max_dishes}')
+        data_list = sql(
+            f'SELECT * FROM dishes WHERE MATCH (title) AGAINST ("{query_text}") LIMIT {start},{max_dishes}')
         if not data_list:
-            data_list = sql(f'SELECT * FROM dishes WHERE title LIKE "%{query_text}%" ORDER BY likes LIMIT {start},{max_dishes} ')
+            data_list = sql(
+                f'SELECT * FROM dishes WHERE title LIKE "%{query_text}%" ORDER BY likes LIMIT {start},{max_dishes} ')
 
         data_list_time_end = time.time()
 
@@ -70,8 +65,6 @@ async def main(query: types.InlineQuery):
         alticle_none = get_blank_data(id=0)
         data_list = alticle_none
         query.query = ''
-
-    
 
     if len(data_list) >= max_dishes:
         next_offset = offset + 1
@@ -88,16 +81,15 @@ async def main(query: types.InlineQuery):
     inline_reslt_time = time.time()
     answer = get_inline_reslt(query, data_list[:50])
     inline_reslt_time_end = time.time()
-    
 
     query_answer_time = time.time()
-    await query.answer(answer[:50],cache_time=cache_time, is_personal=True, switch_pm_text=None, switch_pm_parameter=None, next_offset=next_offset)
+    await query.answer(
+            answer[:50],
+            is_personal=True,
+            cache_time=cache_time,
+            next_offset=next_offset,
+        )
     query_answer_time_end = time.time()
-
-
-
-
-   
 
     print(f'| query | "{query_text}"')
     print(f'| TIME  | data list = {data_list_time_end - data_list_time}')
@@ -106,5 +98,5 @@ async def main(query: types.InlineQuery):
     print(f'| TIME  | all = {query_answer_time_end - start_time}', end=br*2)
 
     with open('test_log_file.txt', 'a', encoding='utf-8') as f:
-        f.write(f'"{query_text}" | {query.from_user.id} | {query.from_user.mention} | {query.from_user.url}\n')
-
+        f.write(
+            f'"{query_text}" | {query.from_user.id} | {query.from_user.mention} | {query.from_user.url}\n')

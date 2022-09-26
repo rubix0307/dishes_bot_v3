@@ -1,7 +1,7 @@
 import copy
 from aiogram.utils.callback_data import CallbackData
 
-
+br = '\n'
 
 show_menu = CallbackData('show_menu', 'menu_name')
 base_markup_menu = CallbackData('base_markup_menu',
@@ -27,4 +27,9 @@ filters = {
     'category': 'c=',
 }
 
+call_filters = {
+    'home': 'home',
+    'countries': 'countries',
+    'categories': 'categories',
 
+}
