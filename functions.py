@@ -78,31 +78,8 @@ class Article:
         ''' 
         return message_text.replace(' '*12,'').replace(br*4, br*2) if self.id > 0 else 'Похоже, тут ничего не найдено'
 
-    def get_markup(self, fav_ids, query: types.InlineQuery):
+    def get_markup(self, fav_ids, query: types.InlineQuery, callback_data: dict):
         
-        callback_data = {
-            'id': self.id,
-            'fav': 0,
-            'view': 0,
-            'query': '',
-            'menu': call_filters['home'],
-        }
-
-
-
-        if self.id in fav_ids:
-            callback_data.update({'fav': 0,})
-        else:
-            callback_data.update({'fav': 1,})
-
-        if not self.show_recipe_instructions:
-            callback_data.update({'view': 1,})    
-        else:
-            callback_data.update({'view': 0,})
-
-
-        callback_data.update({'query': query.query,})
-
 
         markup = InlineKeyboardMarkup()
         other_recipes = InlineKeyboardButton(text=f'🗂 Другие блюда', switch_inline_query_current_chat=callback_data.get('query'))
@@ -115,65 +92,52 @@ class Article:
 
             if self.id in fav_ids:
                 edit_fav = InlineKeyboardButton(text=f'♥️ Убрать из избранного',
-                    callback_data=edit_fav_by_id_call_menu.new(
-                        id = callback_data.get('id'),
-                        fav = callback_data.get('fav'),
-                        view = callback_data.get('view'),
-                        query = callback_data.get('query'),
-                        menu = callback_data.get('menu'),
-                    )
+                    callback_data=edit_fav_by_id_call_menu.new(**callback_data)
                 )
             else:
                 edit_fav = InlineKeyboardButton(text=f'🤍 В избранное',
-                    callback_data=edit_fav_by_id_call_menu.new(
-                        id = callback_data.get('id'),
-                        fav = callback_data.get('fav'),
-                        view = callback_data.get('view'),
-                        query = callback_data.get('query'),
-                        menu = callback_data.get('menu'),
-                    )
+                    callback_data=edit_fav_by_id_call_menu.new(**callback_data)
                 )
                 
             if not self.show_recipe_instructions:
-                show_recipe = InlineKeyboardButton(text=f'🧾 Показать рецепт', callback_data=get_by_id_call_menu.new(
-                    id = callback_data.get('id'),
-                    fav = callback_data.get('fav'),
-                    view = callback_data.get('view'),
-                    query = callback_data.get('query'),
-                    menu = callback_data.get('menu'),
-                ))         
+                show_recipe = InlineKeyboardButton(text=f'🧾 Показать рецепт', callback_data=get_by_id_call_menu.new(**callback_data))         
             else:
-                show_recipe = InlineKeyboardButton(text=f'📃 Скрыть рецепт', callback_data=get_by_id_call_menu.new(
-                    id = callback_data.get('id'),
-                    fav = callback_data.get('fav'),
-                    view = callback_data.get('view'),
-                    query = callback_data.get('query'),
-                    menu = callback_data.get('menu'),
-                ))
+                show_recipe = InlineKeyboardButton(text=f'📃 Скрыть рецепт', callback_data=get_by_id_call_menu.new(**callback_data))
 
             markup.add(edit_fav)
             markup.add(show_recipe, other_recipes)
 
-            markup.add(main_page)
         
+            count_photo = sql(f'''SELECT COUNT(dish_id) as count_photos FROM photos WHERE dish_id = {callback_data['id']}''')[0]['count_photos']
+
+            if count_photo and callback_data['num_ph'] < count_photo:
+                callback_data['num_ph'] += 1
+
+                next_photo = InlineKeyboardButton(text=f'''[dev] След фото ({callback_data['num_ph'] }/{count_photo})''', 
+                        callback_data=edit_fav_by_id_call_menu.new(**callback_data))
+                markup.add(main_page, next_photo)
+
+            else:
+                markup.add(main_page)
         else:
             markup.add(main_page)
         
         return markup
 
-    def get_inline_query_result(self, fav_ids, query: types.InlineQuery) -> types.InlineQueryResultArticle:
+
+    def get_inline_query_result(self, fav_ids, query: types.InlineQuery, callback_data: dict) -> types.InlineQueryResultArticle:
         return types.InlineQueryResultArticle(
+
+            input_message_content = types.InputTextMessageContent(
+                    message_text= self.get_message_text(),
+                    parse_mode='html',
+                ),
+            reply_markup = self.get_markup(fav_ids, query, callback_data=callback_data),
 
             id= self.id,
             title= self.title,
             thumb_url= self.preview,
             description= self.get_description(),
-            
-            input_message_content=types.InputTextMessageContent(
-                message_text= self.get_message_text(),
-                parse_mode='html',
-                ),
-            reply_markup= self.get_markup(fav_ids, query),
         
         )
 
@@ -181,9 +145,20 @@ def get_inline_reslt(query: types.InlineQuery, data_list):
     fav_ids = [data_id['id'] for data_id in get_fav_dish_by_user(query.from_user.id)]
     answer = []
     
+    
+
     for item in data_list:
         try:
-            answer.append(Article(item, False).get_inline_query_result(fav_ids, query))
+
+            callback_data = {
+                'id': item['id'],
+                'fav': 0 if item['id'] in fav_ids else 1,
+                'view': 0,
+                'query': query.query,
+                'menu': call_filters['home'],
+                'num_ph': 0,
+            }
+            answer.append(Article(item, False).get_inline_query_result(fav_ids, query, callback_data=callback_data))
         except Exception as ex:
             continue
     
@@ -234,12 +209,15 @@ def get_blank_data(id=-1, title='К сожалению, ничего не най
             'protein':0,
             'fats':0,
             'carbohydrates':0,
-            'list_ingredients':' ',
+            'ingredients':'',
+            'list_ingredients':'',
             'recipe':' ',
             'rating':0,
             'categories': [],
             'ingredients': [],
             'photos': [photo],
+            'preview': photo,
+            'likes': 0,
         }]
     return data_list
 

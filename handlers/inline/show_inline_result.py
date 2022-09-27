@@ -2,11 +2,11 @@
 import time
 
 from aiogram import types
-from app import dp
-from db.functions import (sql)
-from functions import get_blank_data, get_inline_reslt
-from markups import filters, br
 from aiogram.utils.markdown import *
+from app import dp
+from db.functions import sql
+from functions import get_blank_data, get_inline_reslt
+from markups import br, call_filters, filters
 
 
 @dp.inline_handler()
@@ -16,7 +16,6 @@ async def main(query: types.InlineQuery):
 
     user = query.from_user
     query_text = query.query
-
     offset = int(query.offset or 0)
 
     cache_time = 5
@@ -71,7 +70,7 @@ async def main(query: types.InlineQuery):
     else:
         next_offset = None
 
-        if not get_blank_data(id=0)[0] in data_list and len(data_list) > 8:
+        if not get_blank_data(id=0)[0] in data_list and (len(data_list) > 8 or offset):
             data_list.append(get_blank_data(
                 id=-100,
                 title='Ты долистал до конца',
@@ -79,6 +78,11 @@ async def main(query: types.InlineQuery):
             )
 
     inline_reslt_time = time.time()
+
+
+    c_data = {
+
+    }
     answer = get_inline_reslt(query, data_list[:50])
     inline_reslt_time_end = time.time()
 
