@@ -30,7 +30,7 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
 
 
 
-    article = Article(data_list_item, show_recipe_instructions = call_data['view'])
+    article = Article(data_list_item, callback_data = call_data)
     
     article, call_data = edit_preview(article, call_data)
     
