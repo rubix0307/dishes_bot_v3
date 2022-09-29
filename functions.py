@@ -44,7 +44,7 @@ def get_advertisement(id: int, offset: int) -> types.InlineQueryResultArticle:
 
 class Article:
 
-    def __init__(self, data, show_recipe_instructions):
+    def __init__(self, data, callback_data):
         self.id = data['id']
         self.title = data['title']  
         self.serving = data['serving']
@@ -59,80 +59,77 @@ class Article:
         self.ingredients = data['ingredients']
         self.preview = data['preview']
 
-        self.show_recipe_instructions = show_recipe_instructions
+        self.callback_data = callback_data
     
     def get_description(self):
         return f'Порций: {self.serving} | {self.cooking_time} | {self.kilocalories} ккал{br}{self.categories}' if self.id > 0 else '😢'
 
     def get_message_text(self):
-        message_text = f'''{hide_link(self.preview)}
+        message_text = f'''{hide_link(self.preview.replace('c88x88', '900x-'))}
             {self.title}
             {self.get_description()}
             {hcode(f'*калорийность для сырых продуктов')}
 
             {self.ingredients}
 
-            {f'🧾 Как готовить:{br}{self.recipe}' if self.show_recipe_instructions else ''}
+            {f'🧾 Как готовить:{br}{self.recipe}' if self.callback_data['view'] else ''}
 
             {hlink(f'Больше рецептов ищу ТУТ', BOT_URL)}
         ''' 
         return message_text.replace(' '*12,'').replace(br*4, br*2) if self.id > 0 else 'Похоже, тут ничего не найдено'
 
-    def get_markup(self, fav_ids, query: types.InlineQuery, callback_data: dict):
+    def get_markup(self):
         
 
         markup = InlineKeyboardMarkup()
-        other_recipes = InlineKeyboardButton(text=f'🗂 Другие блюда', switch_inline_query_current_chat=callback_data.get('query'))
+        
         main_page = InlineKeyboardButton(text=f'🏡 На главную', callback_data=show_menu.new(
             menu_name = call_filters['home']
         ))
 
-        if not self.id < 1:
+        if not self.callback_data['id'] < 1:
 
-
-            if self.id in fav_ids:
+            if self.callback_data['fav']:
                 edit_fav = InlineKeyboardButton(text=f'♥️ Убрать из избранного',
-                    callback_data=edit_fav_by_id_call_menu.new(**callback_data)
-                )
+                    callback_data=edit_fav_by_id_call_menu.new(**self.callback_data))
             else:
                 edit_fav = InlineKeyboardButton(text=f'🤍 В избранное',
-                    callback_data=edit_fav_by_id_call_menu.new(**callback_data)
-                )
+                    callback_data=edit_fav_by_id_call_menu.new(**self.callback_data))
                 
-            if not self.show_recipe_instructions:
-                show_recipe = InlineKeyboardButton(text=f'🧾 Показать рецепт', callback_data=get_by_id_call_menu.new(**callback_data))         
+            if not self.callback_data['view']:
+                show_recipe = InlineKeyboardButton(text=f'🧾 Показать рецепт', callback_data=get_by_id_call_menu.new(**self.callback_data))         
             else:
-                show_recipe = InlineKeyboardButton(text=f'📃 Скрыть рецепт', callback_data=get_by_id_call_menu.new(**callback_data))
+                show_recipe = InlineKeyboardButton(text=f'📃 Скрыть рецепт', callback_data=get_by_id_call_menu.new(**self.callback_data))
+
+            other_recipes = InlineKeyboardButton(text=f'🗂 Другие блюда', switch_inline_query_current_chat=self.callback_data['query'])
 
             markup.add(edit_fav)
             markup.add(show_recipe, other_recipes)
 
         
-            count_photo = sql(f'''SELECT COUNT(dish_id) as count_photos FROM photos WHERE dish_id = {callback_data['id']}''')[0]['count_photos']
+            count_photo = sql(f'''SELECT COUNT(dish_id) as count_photos FROM photos WHERE dish_id = {self.callback_data['id']}''')[0]['count_photos']
+            if count_photo > 1:
+                next_photo = InlineKeyboardButton(text=f'🏞', 
+                    callback_data=edit_photo_call_menu.new(**self.callback_data))
 
-            if count_photo and callback_data['num_ph'] < count_photo:
-                callback_data['num_ph'] += 1
-
-                next_photo = InlineKeyboardButton(text=f'''[dev] След фото ({callback_data['num_ph'] }/{count_photo})''', 
-                        callback_data=edit_fav_by_id_call_menu.new(**callback_data))
                 markup.add(main_page, next_photo)
-
             else:
                 markup.add(main_page)
+
         else:
             markup.add(main_page)
         
         return markup
 
 
-    def get_inline_query_result(self, fav_ids, query: types.InlineQuery, callback_data: dict) -> types.InlineQueryResultArticle:
+    def get_inline_query_result(self) -> types.InlineQueryResultArticle:
         return types.InlineQueryResultArticle(
-
+            reply_markup = self.get_markup(),
             input_message_content = types.InputTextMessageContent(
                     message_text= self.get_message_text(),
                     parse_mode='html',
                 ),
-            reply_markup = self.get_markup(fav_ids, query, callback_data=callback_data),
+            
 
             id= self.id,
             title= self.title,
@@ -142,7 +139,7 @@ class Article:
         )
 
 def get_inline_reslt(query: types.InlineQuery, data_list):
-    fav_ids = [data_id['id'] for data_id in get_fav_dish_by_user(query.from_user.id)]
+    fav_ids = get_fav_ids(query.from_user.id)
     answer = []
     
     
@@ -152,13 +149,13 @@ def get_inline_reslt(query: types.InlineQuery, data_list):
 
             callback_data = {
                 'id': item['id'],
-                'fav': 0 if item['id'] in fav_ids else 1,
+                'fav': 1 if item['id'] in fav_ids else 0,
                 'view': 0,
                 'query': query.query,
                 'menu': call_filters['home'],
                 'num_ph': 0,
             }
-            answer.append(Article(item, False).get_inline_query_result(fav_ids, query, callback_data=callback_data))
+            answer.append(Article(item, callback_data).get_inline_query_result())
         except Exception as ex:
             continue
     
@@ -256,6 +253,7 @@ def get_call_data(callback_data: dict) -> dict:
         'view': int(callback_data.get('view')),
         'query': callback_data.get('query'),
         'menu': callback_data.get('menu'),
+        'num_ph': int(callback_data.get('num_ph')),
     }
 
 def get_fav_ids(user_id: int) -> list:
@@ -295,4 +293,17 @@ def get_alphabet_sort(sorting_list: list):
 
 
 
+def edit_preview(article, call_data, next_photo=False):
+    
+        photos = sql(f'''SELECT DISTINCT url FROM photos WHERE dish_id = {call_data['id']}''')
 
+        if next_photo:
+            call_data['num_ph'] += 1
+        
+        try:
+            article.preview = photos[call_data['num_ph']]['url']
+        except:
+            call_data['num_ph'] = 0
+            article.preview = photos[call_data['num_ph']]['url']
+
+        return article, call_data
