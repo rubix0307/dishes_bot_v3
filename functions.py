@@ -552,3 +552,8 @@ def clear_input_text(text: str):
 
 
 
+def get_home_button():
+    return InlineKeyboardButton(
+                    text=f'⭕️ Главная страница ⭕️',
+                    callback_data=show_menu.new(menu_name=call_filters['home'])
+                )

@@ -3,7 +3,7 @@ from aiogram.types.inline_keyboard import (InlineKeyboardButton,
                                            InlineKeyboardMarkup)
 from app import bot, dp
 from db.functions import sql
-from functions import get_home_page
+from functions import get_home_button, get_home_page
 from markups import call_filters, filters, show_menu
 
 
@@ -65,12 +65,7 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
 
         keyboard_markup.add(InlineKeyboardButton(**keyboard_data,))
 
-    keyboard_markup.add(
-        InlineKeyboardButton(
-            text=f'⭕️ Главная страница ⭕️',
-            callback_data=show_menu.new(menu_name=call_filters['home'])
-        )
-    )
+    keyboard_markup.add(get_home_button())
 
     message_data = {
         'parse_mode': 'html',

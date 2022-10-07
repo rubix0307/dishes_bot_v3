@@ -1,15 +1,9 @@
-import time
-
 from aiogram import types
 from aiogram.dispatcher import filters
-from aiogram.types.inline_keyboard import (InlineKeyboardButton,
-                                           InlineKeyboardMarkup)
-from aiogram.utils.markdown import *
-from app import bot, dp
-from functions import Article, get_data_dish, get_fav_ids, update_last_message
-from markups import call_filters
 from aiogram.utils.exceptions import MessageToDeleteNotFound
 
+from app import dp
+from functions import Article, get_data_dish, get_fav_ids, update_last_message
 
 
 @dp.message_handler(filters.Text(contains=['get_id:']))
@@ -36,7 +30,10 @@ async def show_dish(message: types.Message):
             }
 
     article = Article(data, callback_data = callback_data)
-    await update_last_message(message, castom_message_id=message.message_id + 1)
+    await update_last_message(
+        message,
+        castom_message_id=message.message_id + 1)
+    
     await message.answer(
         reply_markup=article.get_markup(),
         text=article.get_message_text(),
