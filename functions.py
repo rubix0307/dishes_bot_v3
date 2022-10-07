@@ -15,7 +15,7 @@ from db.functions import (get_categories_data_from_id, get_fav_dish_by_user,
 from markups import *
 
 
-def get_home_page(user) -> dict:
+def get_home_page() -> dict:
 
     text = 'Добро пожаловать в бот'
     markup = InlineKeyboardMarkup()

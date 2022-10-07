@@ -17,8 +17,6 @@ get_by_id_call_menu.prefix = 'get_dish'
 edit_fav_by_id_call_menu = copy.deepcopy(base_markup_menu)
 edit_fav_by_id_call_menu.prefix = 'edit_fav'
 
-edit_photo_call_menu = copy.deepcopy(base_markup_menu)
-edit_photo_call_menu.prefix = 'edit_ph'
 
 set_photo_call_menu = copy.deepcopy(base_markup_menu)
 set_photo_call_menu.prefix = 'set_ph'
