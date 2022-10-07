@@ -7,9 +7,7 @@ show_menu = CallbackData('show_menu', 'menu_name')
 base_markup_menu = CallbackData('base_markup_menu',
     'id',
     'fav',
-    'view',
     'query',
-    'menu',
     'num_ph'
     )
 
@@ -22,13 +20,16 @@ edit_fav_by_id_call_menu.prefix = 'edit_fav'
 edit_photo_call_menu = copy.deepcopy(base_markup_menu)
 edit_photo_call_menu.prefix = 'edit_ph'
 
+set_photo_call_menu = copy.deepcopy(base_markup_menu)
+set_photo_call_menu.prefix = 'set_ph'
+
 
 
 
 filters = {
     'favorites': 'favorites',
     'top-day': 'top-day',
-    'category': 'c=',
+    'category': 'Категория=',
 }
 
 call_filters = {

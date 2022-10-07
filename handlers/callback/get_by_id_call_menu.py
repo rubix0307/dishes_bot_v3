@@ -2,7 +2,7 @@ from aiogram import types
 
 from app import bot, dp
 from markups import get_by_id_call_menu
-from functions import Article, edit_preview, get_call_data
+from functions import Article, edit_preview, get_call_data, get_data_dish
 from db.functions import sql
 
 
@@ -12,9 +12,9 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
     call_data = get_call_data(callback_data)
 
 
-    data = sql(f'''SELECT * FROM dishes WHERE id = {call_data['id']}''')[0]
+    data = get_data_dish(call_data['id'])
 
-    call_data['view'] = int(not call_data['view'])
+    # call_data['view'] = int(not call_data['view'])
     article = Article(data, callback_data = call_data)
 
     article, call_data = edit_preview(article, call_data)

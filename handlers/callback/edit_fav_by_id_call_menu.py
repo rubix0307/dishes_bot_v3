@@ -2,7 +2,7 @@ from aiogram import types
 
 from app import bot, dp
 from markups import edit_fav_by_id_call_menu
-from functions import Article, edit_preview, get_call_data, get_fav_ids
+from functions import Article, edit_preview, get_call_data, get_data_dish, get_fav_ids
 from db.functions import get_fav_dish_by_user, sql
 
 
@@ -26,7 +26,7 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
     call_data['fav'] = int(not call_data['fav'])
 
 
-    data_list_item = sql(f'''SELECT * FROM dishes WHERE id = {call_data['id']}''')[0]
+    data_list_item = get_data_dish(call_data['id'])
 
 
 
@@ -34,13 +34,24 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
     
     article, call_data = edit_preview(article, call_data)
     
-    await bot.edit_message_text(
-            text = article.get_message_text(),
-            inline_message_id = call.inline_message_id,
-            reply_markup = article.get_markup(),
-            parse_mode = 'html'
-        )
+    try:
+        await bot.edit_message_text(
+                text = article.get_message_text(),
+                inline_message_id = call.inline_message_id,
+                reply_markup = article.get_markup(),
+                parse_mode = 'html'
+            )
 
-    await call.answer(answer_text)
+    except:
+        await bot.edit_message_text(
+            chat_id=call.from_user.id,
+            reply_markup=article.get_markup(),
+            text=article.get_message_text(),
+            message_id=call.message.message_id,
+            parse_mode='html',
+        )
+    
+    finally:
+        await call.answer(answer_text)
 
 
