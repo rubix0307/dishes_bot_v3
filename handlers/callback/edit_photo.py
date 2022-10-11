@@ -1,3 +1,4 @@
+import time
 from aiogram import types
 from aiogram.utils.exceptions import MessageNotModified
 
@@ -8,6 +9,7 @@ from markups import set_photo_call_menu
 
 @dp.callback_query_handler(set_photo_call_menu.filter())
 async def edit_photo(call: types.CallbackQuery, callback_data: dict()):
+    start = time.time()
 
     call_data = get_call_data(callback_data)
 
@@ -23,7 +25,8 @@ async def edit_photo(call: types.CallbackQuery, callback_data: dict()):
         'text': article.get_message_text(),
         
     }
-
+    get_time = time.time()
+    
     try:
 
         try:
@@ -44,3 +47,5 @@ async def edit_photo(call: types.CallbackQuery, callback_data: dict()):
 
     finally:
         await call.answer()
+        print(f'| photo  | get in {round(get_time - start, 3)}s')
+        print(f'| photo  | all in {round(time.time() - start, 3)}s', end='\n'*2)

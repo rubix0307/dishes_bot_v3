@@ -1,4 +1,7 @@
 import copy
+
+from aiogram.types.inline_keyboard import (InlineKeyboardButton,
+                                           InlineKeyboardMarkup)
 from aiogram.utils.callback_data import CallbackData
 
 br = '\n'
@@ -36,3 +39,18 @@ call_filters = {
     'categories': 'categories',
 
 }
+
+
+# inline buttons
+def get_home_button(text: str = '⭕️ Главная страница ⭕️'):
+    return InlineKeyboardButton(
+        text=text,
+        callback_data=show_menu.new(menu_name=call_filters['home'])
+    )
+
+
+def get_back_to_inline(button_text: str = f'↪️ Назад', query_text: str = ''):
+    return InlineKeyboardButton(
+        text=button_text,
+        switch_inline_query_current_chat=query_text,
+    )

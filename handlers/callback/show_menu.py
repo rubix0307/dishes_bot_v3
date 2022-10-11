@@ -10,9 +10,8 @@ from markups import call_filters, filters, show_menu
 @dp.callback_query_handler(show_menu.filter())
 async def show_dish(call: types.CallbackQuery, callback_data: dict()):
 
-    highlight_symbol = '✨ '
+    highlight_symbol = '⭐️ '
     menu_name = callback_data['menu_name']
-    
 
     if call_filters['home'] in menu_name:
 
@@ -28,7 +27,7 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
         try:
             await call.message.edit_text(**message_data)
         
-        except:
+        except Exception as ex:
             await bot.edit_message_text(
                 inline_message_id=call.inline_message_id,
                 **message_data,
@@ -45,9 +44,25 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
         categories = sql(
             'SELECT title, emoji FROM categories WHERE parent_id = 1 AND is_show = 1')
 
+
+        new_category_list = []
+        
+        max_len = max([len(category['title'].split()[0]) if not category['title'].split()[0] in ['Средиземноморская','Азербайджанская'] else 0  for category in categories])
+        for category in categories:
+            title = category['title'].split()[0]
+
+            spase = '⠀'* (max_len - len(title))
+            category['title'] = f'''{title} {spase}{category['emoji']}'''
+            new_category_list.append(category)
+
         for category in top_categories:
-            category['title'] = f'''{highlight_symbol}{category['title']}'''
-            categories.append(category)
+            title = category['title'].split()[0]
+
+            spase = '⠀'* (max_len - len(title))
+            category['title'] = f'''{highlight_symbol} {title} {spase[:-1]}{category["emoji"]}'''
+            new_category_list.append(category)
+
+        categories = new_category_list
 
     else:
         text = 'По категориям'
@@ -55,11 +70,13 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
 
     keyboard_markup = InlineKeyboardMarkup()
     for category in categories[:99]:
+        if highlight_symbol in category['title']:
+            print()
 
-        title = category['title'].replace(highlight_symbol, '').split(' ')[0][:12].lower()
+        title = category['title'].replace(highlight_symbol, '').strip().split(' ')[0][:12].lower()
 
         keyboard_data = {
-            'text': f'{category["title"]} {category["emoji"]}',
+            'text': category['title'],
             'switch_inline_query_current_chat': f'''{filters['category']}{title}''',
         }
 

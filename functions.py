@@ -22,28 +22,89 @@ def get_home_page() -> dict:
     markup.add(InlineKeyboardButton(text=f'♥️ Избранное', switch_inline_query_current_chat=filters['favorites']))
     markup.add(InlineKeyboardButton(text=f'🗂 По категориям', callback_data=show_menu.new(menu_name=call_filters['categories'])))
     markup.add(InlineKeyboardButton(text=f'🌍 Кухни мира 🌎', callback_data=show_menu.new(menu_name=call_filters['countries'])))
-    markup.add(InlineKeyboardButton(text=f'🧾 Показать все рецепты', switch_inline_query_current_chat=''))
+    markup.add(InlineKeyboardButton(text=f'🧾 Искать рецепт', switch_inline_query_current_chat=''))
 
     return {
         'text': text,
         'markup': markup,
     }
 
-def get_advertisement(id: int, offset: int) -> types.InlineQueryResultArticle:
-    return types.InlineQueryResultArticle(
+def сleaning_input_text_from_sql_injection(text: str):
 
-            id=id*-1,
-            title=f'Ваша реклама',
-            thumb_url=f'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQ4qwp5h7c3KcNSnOImf64Dz1_bf_6ysZ6tQ&usqp=CAU',
-            description=f'№ {id}/{offset + 1} | Заказать рекламу можно тут',
-            
-            input_message_content=types.InputTextMessageContent(
-                message_text=f'''Реклама №{id}{br}{f'Страница №{offset+1}'}''',
-                parse_mode='html'),
+    sumbols = '|'.join('~!@#$%*()+:;<>,.?/^')
+    key_words = '|'.join(['DELETE', 'ALTER' , 'CREATE' , 'DROP' , 'LIKE' , 'TABLE' , 'WHERE', 'SET'])
+    answer = re.sub(f'[|{sumbols}|{key_words.lower()}|]','',text.capitalize()).replace('  ', ' ').strip()
+    return answer
+
+
+def сleaning_input_text_for_search(query_text: str):
+    query_text = f' {query_text} '
+    prelogs = [' без ', ' безо ', ' близ ', ' в ',  ' во ', ' вместо ', ' вне ', ' для ', ' до ', ' за ', ' из ', ' изо ', ' к ',  ' ко ', ' кроме ', ' между ', ' меж ', ' на ', ' над ', ' надо ', ' о ',  ' об ', ' обо ', ' от ', ' ото ', ' перед ', ' передо ', ' предо ', ' пo ', ' под ', ' при ', ' про ', ' ради ', ' с ',  ' со ', ' сквозь ', ' среди ', ' через ', ' чрез ']
+    for prelog in prelogs:
+        query_text = query_text.replace(prelog, ' ')
+
+    return query_text.strip()
+
+def get_advertisement(id: int, offset: int, query_text: str) -> types.InlineQueryResultArticle:
+
+    data_ad = sql(f'SELECT * FROM ads WHERE position = {id} AND offset = {offset}')
+
+    if data_ad:
+        data_ad = data_ad[0]
+
         
+
+        input_message_content=types.InputTextMessageContent(
+                message_text=f'''{hide_link(data_ad['preview_photo'])}{data_ad['message_text']}'''+ f'''\n{'-'*40}\n{hlink(f'Заказать рекламу в боте', BOT_URL)}''',
+                parse_mode=data_ad['parse_mode'])
+        
+
+        markup = InlineKeyboardMarkup()
+        
+        url_button = InlineKeyboardButton(text=data_ad['url_button_text'] , url=data_ad['url'])
+
+       
+
+        markup.add(url_button)
+        markup.add(get_home_button(text='🏡 На главную'), get_back_to_inline(query_text=query_text))
+
+        result_article = {
+            'id': id*-1,
+            'title':  data_ad['preview_title'],
+            'url':  data_ad['url'],
+            'thumb_url':  data_ad['preview_photo'],
+            'description':  data_ad['preview_description'],
+            'input_message_content': input_message_content,
+            'reply_markup': markup,
+        }
+
+
+
+    else:
+        input_message_content=types.InputTextMessageContent(
+                message_text=f'''Реклама №{id}{br}{f'Страница №{offset+1}'}''',
+                parse_mode='html')
+
+        result_article = {
+            'id': id*-1,
+            'title': f'‼️ Ваша реклама ‼️',
+            'thumb_url': f'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQ4qwp5h7c3KcNSnOImf64Dz1_bf_6ysZ6tQ&usqp=CAU',
+            'description': f'№ {id}/{offset + 1} | Заказать рекламу можно тут',
+            'input_message_content': input_message_content
+
+        }
+        
+
+    return types.InlineQueryResultArticle(
+        **result_article,   
         )
 
+def insert_ad(offset, answer, query_text):
 
+    for round, i in enumerate(range(0, len(answer) + 1, 10)):
+        answer.insert(i, get_advertisement(round + 1, offset, query_text))
+    
+    return answer
 
 class Article:
 
@@ -56,9 +117,9 @@ class Article:
         self.protein = data['protein']
         self.fats = data['fats']
         self.carbohydrates = data['carbohydrates']
-        self.recipe = data['recipe'].replace(br, br*2)
+        self.recipe = data['recipe'].replace(br, br*2) if data['recipe'] else ''
 
-        self.categories = data['categories']
+        self.categories = data['categories'].capitalize() if data['categories'] else ''
         self.ingredients = data['ingredients']
 
         try:
@@ -83,7 +144,7 @@ class Article:
 
             {f'🧾 Как готовить:{br}{self.recipe}'}
 
-            {hlink(f'Больше рецептов ищу ТУТ', BOT_URL)}
+            {hlink(f'📖 Книга рецептов', BOT_URL)}
         ''' 
         return message_text.replace(' '*12,'').replace(br*4, br*2) if self.id > 0 else 'Похоже, тут ничего не найдено'
 
@@ -94,19 +155,11 @@ class Article:
         
         markup = InlineKeyboardMarkup(row_width=8)
         
-        main_page = InlineKeyboardButton(text=f'🏡 На главную', callback_data=show_menu.new(
-            menu_name = call_filters['home']
-        ))
 
         if not self.callback_data['id'] < 1:
 
             photos = self.get_nav_photo()
             fav = self.get_fav_button()
-            # view = self.get_view_button()
-
-            other_recipes = InlineKeyboardButton(text=f'↪️ Назад', switch_inline_query_current_chat=self.callback_data['query'])
-
-
 
             try:
                 markup.add(*photos)
@@ -114,13 +167,13 @@ class Article:
                 pass
 
             markup.add(fav)
-            markup.add(main_page, other_recipes)
+            markup.add(get_home_button(text='🏡 На главную'), get_back_to_inline(query_text=self.callback_data['query']))
 
 
             
 
         else:
-            markup.add(main_page)
+            markup.add(get_home_button(text='🏡 На главную'), get_back_to_inline(query_text=self.callback_data['query']))
         
         return markup
     
@@ -160,9 +213,6 @@ class Article:
                 else:
                     buttons_ph.append(button)
 
-                # if num_ph <= current_num_ph + 2 and  num_ph >= current_num_ph - 2:
-                #     buttons_ph.append(InlineKeyboardButton(text=f'{decorations}{num_ph + 1}{decorations}', 
-                #             callback_data= set_photo_call_menu.new(**callback_data)))
                 
 
         
@@ -170,22 +220,16 @@ class Article:
         return
 
     def get_fav_button(self):
-        if self.callback_data['fav']:
-            edit_fav = InlineKeyboardButton(text=f'♥️ Убрать из избранного',
-                callback_data=edit_fav_by_id_call_menu.new(**self.callback_data))
-        else:
-            edit_fav = InlineKeyboardButton(text=f'🤍 В избранное',
-                callback_data=edit_fav_by_id_call_menu.new(**self.callback_data))
-        
-        return edit_fav
 
-    def get_view_button(self):
-        if not self.callback_data['view']:
-            show_recipe = InlineKeyboardButton(text=f'🧾 Показать рецепт', callback_data=get_by_id_call_menu.new(**self.callback_data))         
+        if self.callback_data['fav']:
+            text='♥️ Убрать из избранного'
         else:
-            show_recipe = InlineKeyboardButton(text=f'📃 Скрыть рецепт', callback_data=get_by_id_call_menu.new(**self.callback_data))
+            text = '🤍 В избранное'
+
+        return InlineKeyboardButton(text=text,
+            callback_data=edit_fav_by_id_call_menu.new(**self.callback_data))
         
-        return show_recipe
+
 
     def get_inline_query_result(self) -> types.InlineQueryResultArticle:
         return types.InlineQueryResultArticle(
@@ -203,68 +247,65 @@ class Article:
         
         )
 
-def get_inline_result(query: types.InlineQuery, data_list):
-    fav_ids = get_fav_ids(query.from_user.id)
+
+
+
+
+def get_inline_result(query, data_list, offset, is_personal_chat: bool = False, **kwargs):
     answer = []
-    
-    
 
-    for item in data_list:
-        try:
+    if not is_personal_chat:
+        for data in data_list:
 
-            callback_data = {
-                'id': item['id'],
-                'fav': 1 if item['id'] in fav_ids else 0,
-                'query': query.query,
-                'num_ph': 0,
-            }
-            answer.append(Article(item, callback_data).get_inline_query_result())
-        except Exception as ex:
-            continue
-    
-    # ad block
-    offset = int(query.offset) if query.offset else 0
-    for round, i in enumerate(range(0, len(answer) + 1, 10)):
-        answer.insert(i, get_advertisement(round + 1, offset))
-    return answer
+            if data['id'] > 0:
+                if not data['categories']:
+                    data['categories'] = "-"*20
+
+                description = f'''Порций: {data['serving']} | {data['cooking_time']} | {data['kilocalories']} ккал{br}{data['categories'].capitalize()}'''
+            else:
+                description = f'😢'
+
+            try:
+                thumb_url = data['photos'].split('\n')[0].replace('900x-', 'c88x88') if type(data['photos']) == str else (data['photos'][0] if data['photos'] else None)
+                answer.append(
+                    types.InlineQueryResultArticle(
+                        input_message_content = types.InputTextMessageContent(
+                                message_text= f"get_id:{data['id']}|query_text:{query.query}",
+                                parse_mode='html',
+                            ),
+                        
+
+                        id= data['id'],
+                        title= data['title'],
+                        thumb_url= thumb_url,
+                        description= description,
+                    
+                    )
+                )
+            except:
+                pass
 
 
 
-def get_inline_result_min_data(query, query_text, data_list):
-    answer = []
-    for data in data_list:
+    else:
+        fav_ids = get_fav_ids(query.from_user.id)
+        for item in data_list:
+            try:
 
-        if data['id'] > 0:
-            if not data['categories']:
-                data['categories'] = "-"*20
-
-            description = f'''Порций: {data['serving']} | {data['cooking_time']} | {data['kilocalories']} ккал{br}{data['categories'].capitalize()}'''
-        else:
-            description = f'😢'
-
-        try:
-            thumb_url = data['photos'].split('\n')[0].replace('900x-', 'c88x88') if type(data['photos']) == str else (data['photos'][0] if data['photos'] else None)
-            answer.append(
-                types.InlineQueryResultArticle(
-                input_message_content = types.InputTextMessageContent(
-                        message_text= f"get_id:{data['id']}|query_text:{query_text}",
-                        parse_mode='html',
-                    ),
-                
-
-                id= data['id'],
-                title= data['title'],
-                thumb_url= thumb_url,
-                description= description,
-            
-            ))
-        except:
-            print()
+                callback_data = {
+                    'id': item['id'],
+                    'fav': 1 if item['id'] in fav_ids else 0,
+                    'query': query.query,
+                    'num_ph': 0,
+                }
+                answer.append(Article(item, callback_data).get_inline_query_result())
+            except Exception as ex:
+                continue
 
     # ad block
-    offset = int(query.offset) if query.offset else 0
-    for round, i in enumerate(range(0, len(answer) + 1, 10)):
-        answer.insert(i, get_advertisement(round + 1, offset))
+    ad_reply = insert_ad(offset, answer, query.query)
+    
+    
     return answer
 
 def get_extra_data(data_list):
@@ -296,7 +337,7 @@ def get_extra_data(data_list):
 
 def get_blank_data(id=-1, title='К сожалению, ничего не найдено', photo='https://sitechecker.pro/wp-content/uploads/2017/12/404.png'):
     data_list = [{
-            'id': id,
+            'id': int(id),
             'title':title,
             'link':' ',
             'photo':photo,
@@ -339,10 +380,13 @@ async def update_last_message(message: types.Message, castom_message_id = None):
 
     elif not message_id == last_message[0]['message_id']:
         try:
-            await bot.delete_message(
-                    chat_id=user.id,
-                    message_id=last_message[0]['message_id']
-                )
+            try:
+                await bot.delete_message(
+                        chat_id=user.id,
+                        message_id=last_message[0]['message_id']
+                    )
+            except:
+                pass
         finally:
             sql(f'UPDATE users_messages SET message_id={message_id} WHERE user_id = {user.id}', commit=True)
 
@@ -424,40 +468,90 @@ def edit_preview(article=None, call_data=None, next_photo=False, get_url=False):
 
 
 def get_data_dish(id: int):
+    if id > 0:
+        sql_query = f'''
+        SELECT d.id, d.title, d.original_link, d.serving, d.cooking_time, d.kilocalories,d.protein, d.fats, d.carbohydrates, d.recipe, d.likes,
+            GROUP_CONCAT(DISTINCT p.url SEPARATOR "\n") as photos,
+            GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') as ingredients,
+            GROUP_CONCAT(DISTINCT c.title SEPARATOR ", ") as categories
+        FROM dishes as d
+
+        LEFT JOIN photos as p ON d.id = p.dish_id
+        
+        LEFT JOIN dishes_categories as dc ON d.id = dc.dish_id
+        LEFT JOIN categories as c ON c.id = dc.category_id
+
+        LEFT JOIN dishes_ingredients as di ON d.id = di.dish_id
+        LEFT JOIN ingredients as i ON di.ingredient_id = i.id
+
+        WHERE d.id = {id}
+        '''
+        return sql(sql_query)[0]
+    else:
+        return get_blank_data(id=id)[0]
+
+
+
+
+
+
+
+
+
+def get_by_favorites(user_id, start, max_dishes):
+
     sql_query = f'''
-    SELECT
-        dishes.*,
-        GROUP_CONCAT(DISTINCT photos.url SEPARATOR "\n") as photos,
-        GROUP_CONCAT(DISTINCT CONCAT(ingredients.title,": " ,dishes_ingredients.value) SEPARATOR "\n") as ingredients,
-        GROUP_CONCAT(DISTINCT categories.title SEPARATOR ", ") as categories
-    FROM dishes
+    SELECT d.*,
+        (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+        (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+        (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
+    FROM dishes as d
 
-    LEFT JOIN photos ON dishes.id = photos.dish_id
-    
-    LEFT JOIN dishes_categories ON dishes.id = dishes_categories.dish_id
-    LEFT JOIN categories ON categories.id = dishes_categories.category_id
+    INNER JOIN fav_dish_user as fdu ON fdu.user_id = {user_id} AND fdu.dish_id = d.id
+    WHERE 1
+    LIMIT {start},{max_dishes}'''
+    data_list = sql(sql_query)
 
-    LEFT JOIN dishes_ingredients ON dishes.id = dishes_ingredients.dish_id
-    LEFT JOIN ingredients ON dishes_ingredients.ingredient_id = ingredients.id
+    return data_list
 
-    WHERE dishes.id = {id}
+def get_by_favorites_min(user_id, start, max_dishes):
+    sql_query = f'''
+    SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
+        (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+        (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
+    FROM dishes as d 
+    WHERE d.id in (select dish_id from fav_dish_user where user_id = {user_id})
+    ORDER BY d.likes DESC
+    LIMIT {start},{max_dishes}
     '''
-    return sql(sql_query)[0]
+    data_list = sql(sql_query)
+    return data_list
+
+def get_data_by_favorites(user_id, start, max_dishes, is_personal_chat: bool = False, **kwargs):
+    
+    if not is_personal_chat:
+        data_list = get_by_favorites_min(user_id, start, max_dishes)
+    else:
+        data_list = get_by_favorites(user_id, start, max_dishes)
+    return data_list
 
 
 
+def get_by_category(category_id, start, max_dishes):
 
-def get_data_list_by_category(query_text, start, max_dishes):
-
-    cat_name = query_text.split(filters['category'])[1]
-    filter = sql(
-        f'SELECT id FROM categories WHERE title LIKE "%{cat_name}%" LIMIT 1')
     sql_query = f'''
-        SELECT dishes.* FROM dishes
-        LEFT JOIN dishes_categories ON dishes_categories.dish_id = dishes.id
-        LEFT JOIN categories ON categories.id = dishes_categories.category_id
-        WHERE dishes_categories.category_id = {filter[0]['id'] if len(filter) else 27} 
-        ORDER BY likes
+        SELECT d.*,
+            (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+            (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+            (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
+        FROM dishes as d
+
+        LEFT JOIN dishes_categories as dc ON dc.dish_id = d.id
+        LEFT JOIN categories as c ON c.id = dc.category_id
+       
+        WHERE dc.category_id = {category_id} 
+        
+        ORDER BY d.likes
         LIMIT {start},{max_dishes}
     '''
 
@@ -465,16 +559,14 @@ def get_data_list_by_category(query_text, start, max_dishes):
 
     return data_list
 
-def get_data_list_by_category_min_data(query_text, start, max_dishes):
-    cat_name = query_text.split(filters['category'])[1]
-    filter_id = sql(
-        f'SELECT id FROM categories WHERE title LIKE "{cat_name}%" LIMIT 1')[0]['id']
+def get_by_category_min(category_id, start, max_dishes):
+
     sql_query = f'''
         SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
             (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
             (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
         FROM dishes as d 
-        WHERE d.id in (select dish_id from dishes_categories where category_id = {filter_id if filter_id else 27})
+        WHERE d.id in (select dish_id from dishes_categories where category_id = {category_id})
         ORDER BY d.likes DESC
         LIMIT {start},{max_dishes}
     '''
@@ -483,77 +575,73 @@ def get_data_list_by_category_min_data(query_text, start, max_dishes):
 
     return data_list
 
+def get_data_by_category(query_text, start, max_dishes, is_personal_chat: bool = False, **kwargs):
+
+    cat_name = query_text.split(filters['category'])[1]
+    try:
+        category_id = sql(
+            f'SELECT id FROM categories WHERE title LIKE "{cat_name}%" LIMIT 1')[0]['id']
+    except IndexError:
+        category_id = 27
 
 
-
-def get_data_list_by_favorites(user, start, max_dishes):
-
-    sql_query = f'''
-    SELECT dishes.* FROM dishes
-    INNER JOIN fav_dish_user ON fav_dish_user.user_id = {user.id} AND fav_dish_user.dish_id = dishes.id
-    WHERE 1 
-    LIMIT {start},{max_dishes}'''
-    data_list = sql(sql_query)
-
+    if not is_personal_chat:
+        data_list = get_by_category_min(category_id, start, max_dishes)
+    else:
+        data_list = get_by_category(category_id, start, max_dishes)
     return data_list
 
-def get_data_list_by_favorites_min_data(user, start, max_dishes):
-    sql_query = f'''
-    SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
-        (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-        (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
-    FROM dishes as d 
-    WHERE d.id in (select dish_id from fav_dish_user where user_id = {user.id})
-    ORDER BY d.likes DESC
-    LIMIT {start},{max_dishes}
-    '''
-    data_list = sql(sql_query)
-    return data_list
 
-def get_data_list_by_query_text(query_text, start, max_dishes):
+
+def get_by_query_text(query_text, start, max_dishes):
 
     data_list = sql(
-        f'SELECT * FROM dishes WHERE MATCH (title) AGAINST ("{query_text}") ORDER BY `dishes`.`likes` DESC LIMIT {start},{max_dishes}')
+        f'''SELECT d.*,
+                (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+                (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+                (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
+        FROM dishes as d
+        WHERE MATCH (title) AGAINST ("{query_text}") ORDER BY d.likes DESC LIMIT {start},{max_dishes}''')
     if not data_list:
         data_list = sql(
-            f'SELECT * FROM dishes WHERE title LIKE "%{query_text}%" ORDER BY likes LIMIT {start},{max_dishes}')
+            f'''SELECT d.*,
+                (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+                (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+                (select  GROUP_CONCAT(DISTINCT CONCAT(i.title,": " ,di.value)) from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
+
+            FROM dishes as d
+            WHERE d.title LIKE "%{query_text}%" ORDER BY d.likes LIMIT {start},{max_dishes}''')
     
     return data_list
 
-def get_data_list_by_query_text_min_data(query_text, start, max_dishes):
+def get_by_query_text_min(query_text, start, max_dishes):
     data_list = sql(
-        f'''SELECT  d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
-            (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-            (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
-        FROM dishes as d 
+            f'''SELECT  d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
+                (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+                (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
+            FROM dishes as d 
 
-        WHERE MATCH (d.title) AGAINST ("{query_text}") ORDER BY d.likes DESC
-            LIMIT {start}, {max_dishes}'''
-    )
+            WHERE MATCH (d.title) AGAINST ("{query_text}")
+                LIMIT {start}, {max_dishes}'''
+        )
     if not data_list:
         data_list = sql(
             f'''
-            SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories, d.categories,
+            SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories,
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
                 (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
             FROM dishes as d 
             WHERE title LIKE "%{query_text}%" ORDER BY d.likes DESC
             LIMIT {start},{max_dishes}
             ''')
-
     return data_list
 
-def clear_input_text(text: str):
+def get_data_by_query_text(query_text, start, max_dishes, is_personal_chat: bool = False, **kwargs):
+    
+    if not is_personal_chat:
+        data_list = get_by_query_text_min(query_text, start, max_dishes)
+    else:
+        data_list = get_by_query_text(query_text, start, max_dishes)
+    return data_list
 
-    sumbols = '|'.join('~!@#$%*()+|:;<>,.?/^')
-    answer = re.sub(f'[{sumbols}]','',text)
-    return answer.strip()
 
-
-
-
-def get_home_button():
-    return InlineKeyboardButton(
-                    text=f'⭕️ Главная страница ⭕️',
-                    callback_data=show_menu.new(menu_name=call_filters['home'])
-                )

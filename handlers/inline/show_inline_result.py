@@ -3,47 +3,47 @@ import time
 
 from aiogram import types
 from app import dp
-from functions import (clear_input_text, get_blank_data,
-                       get_data_list_by_category_min_data,
-                       get_data_list_by_favorites_min_data,
-                       get_data_list_by_query_text_min_data,
-                       get_inline_result_min_data)
+from functions import (get_blank_data, get_data_by_category, get_data_by_favorites, get_data_by_query_text,
+                       get_inline_result,
+                       сleaning_input_text_for_search, сleaning_input_text_from_sql_injection)
 from markups import br, filters
 
 
 @dp.inline_handler()
 async def main(query: types.InlineQuery):
-
     start_time = time.time()
 
-    user = query.from_user
-    query_text = query.query
-    query.query = clear_input_text(query_text)
-    
+    query.query = сleaning_input_text_from_sql_injection(query.query)
 
-
-    offset = int(query.offset or 0)
 
     max_items = 45
+    offset = int(query.offset or 0)
     max_dishes = max_items if offset else max_items - 1
     start = (offset * max_dishes - 1) if offset else 0
 
-    if filters['favorites'] in query_text:
-        # data_list = get_data_list_by_favorites(user, start, max_dishes)
-        data_list = get_data_list_by_favorites_min_data(user, start, max_dishes)
+    data = {
+        'query': query,
+        'user_id': query.from_user.id,
+        'query_text': сleaning_input_text_for_search(query.query),
+        'max_dishes': max_dishes,
+        'offset': offset,
+        'start': start,
+        'is_personal_chat': True if query._values['chat_type'] == 'private' else False,
+        'is_personal': True,
+    }
 
-    elif filters['category'] in query_text:
-        # data_list = get_data_list_by_category(query_text, start, max_dishes)
-        data_list = get_data_list_by_category_min_data(query_text, start, max_dishes)
+    if filters['favorites'] in query.query:
+        data_list = get_data_by_favorites(**data)
+
+    elif filters['category'] in query.query:
+        data_list = get_data_by_category(**data)
 
     else:
-        # data_list = get_data_list_by_query_text(query_text, start, max_dishes)
-        data_list = get_data_list_by_query_text_min_data(query_text, start, max_dishes)
+        data_list = get_data_by_query_text(**data)
 
 
     if not data_list:
-        alticle_none = get_blank_data(id=0)
-        data_list = alticle_none
+        data_list = get_blank_data(id=0)
         query.query = ''
 
     if len(data_list) >= max_dishes:
@@ -58,19 +58,32 @@ async def main(query: types.InlineQuery):
                 photo='https://regnum.ru/uploads/pictures/news/2021/10/22/regnum_picture_1634889920126510_big.png')[0],
             )
 
+    data.update({'data_list': data_list[:50]})
 
-    # answer = get_inline_result(query, data_list[:50])
-    answer = get_inline_result_min_data(query, query_text, data_list[:50])
+    answer = get_inline_result(**data)
 
     get_data = time.time()
+
+    answer_data = {
+        'results':answer[:50],
+        'cache_time':1,
+        'is_personal': True,
+        'next_offset': next_offset,
+    }
+
+    if data['is_personal_chat']:
+        answer_data.update({
+            'switch_pm_text':'Ускорить поиск',
+            'switch_pm_parameter':'speed',
+        })
+
     await query.answer(
-            answer[:50],
-            cache_time=1,
-            is_personal=True,
-            next_offset=next_offset,
+            **answer_data
         )
 
     query_answer_time_end = time.time()
-    print(f'| TIME  | get = {get_data - start_time}')
-    print(f'| TIME  | all = {query_answer_time_end - start_time}', end=br*2)
+    print(f'| text   | {data["query_text"]}')
+    print(f'| chat   | {query._values["chat_type"]}')
+    print(f'| inline | get in {round(get_data - start_time, 3)}s')
+    print(f'| inline | all in {round(query_answer_time_end - start_time, 3)}s', end=br*2)
 
