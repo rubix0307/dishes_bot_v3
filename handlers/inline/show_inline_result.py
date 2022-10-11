@@ -32,7 +32,7 @@ async def main(query: types.InlineQuery):
         'is_personal': True,
     }
 
-    if filters['favorites'] in query.query:
+    if filters['favorites'] in query.query.lower():
         data_list = get_data_by_favorites(**data)
 
     elif filters['category'] in query.query:

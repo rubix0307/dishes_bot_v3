@@ -32,8 +32,7 @@ def get_home_page() -> dict:
 def сleaning_input_text_from_sql_injection(text: str):
 
     sumbols = '|'.join('~!@#$%*()+:;<>,.?/^')
-    key_words = '|'.join(['DELETE', 'ALTER' , 'CREATE' , 'DROP' , 'LIKE' , 'TABLE' , 'WHERE', 'SET'])
-    answer = re.sub(f'[|{sumbols}|{key_words.lower()}|]','',text.capitalize()).replace('  ', ' ').strip()
+    answer = re.sub(f'[|{sumbols}|]','',text.capitalize()).replace('  ', ' ').strip()
     return answer
 
 
