@@ -28,7 +28,7 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
 
     data_list_item = get_data_dish(call_data['id'])
 
-    article = Article(data_list_item, callback_data=call_data)
+    article = Article(data_list_item, callback_data=call_data, user_id=user.id)
     article, call_data = edit_preview(article, call_data)
 
 

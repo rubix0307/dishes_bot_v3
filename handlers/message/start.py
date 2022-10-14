@@ -2,13 +2,15 @@ from aiogram import types
 
 from app import dp, bot
 from db.functions import sql
-from functions import get_home_page, update_last_message
+from functions import get_home_page, register_user, update_last_message
 
 
 @dp.message_handler(state='*', commands=['start'])
 async def main_def(message: types.Message):
-    
-    data = get_home_page()
+    register_user(message)
+
+    user = message.from_user
+    data = get_home_page(user.id)
     data_answer = {
         'text': data['text'],
         'reply_markup': data['markup'],

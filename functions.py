@@ -8,14 +8,14 @@ from aiogram.types.inline_keyboard import (InlineKeyboardButton,
 from aiogram.utils.markdown import *
 
 from app import bot
-from config import BOT_URL
+from config import ADMIN_ID, BOT_URL
 from db.functions import (get_categories_data_from_id, get_fav_dish_by_user,
                           get_ingredients_data_from_id,
                           get_photos_data_from_id, sql)
 from markups import *
 
 
-def get_home_page() -> dict:
+def get_home_page(user_id:int=0) -> dict:
 
     text = 'Добро пожаловать в бот'
     markup = InlineKeyboardMarkup()
@@ -23,6 +23,11 @@ def get_home_page() -> dict:
     markup.add(InlineKeyboardButton(text=f'🗂 По категориям', callback_data=show_menu.new(menu_name=call_filters['categories'])))
     markup.add(InlineKeyboardButton(text=f'🌍 Кухни мира 🌎', callback_data=show_menu.new(menu_name=call_filters['countries'])))
     markup.add(InlineKeyboardButton(text=f'🧾 Искать рецепт', switch_inline_query_current_chat=''))
+
+    if user_id == ADMIN_ID:
+        markup.add(InlineKeyboardButton(text=f'✉️ Рассылка', switch_inline_query_current_chat=filters['mailing']))
+
+
 
     return {
         'text': text,
@@ -32,7 +37,7 @@ def get_home_page() -> dict:
 def сleaning_input_text_from_sql_injection(text: str):
 
     sumbols = '|'.join('~!@#$%*()+:;<>,.?/^')
-    answer = re.sub(f'[|{sumbols}|]','',text.capitalize()).replace('  ', ' ').strip()
+    answer = re.sub(f'[|{sumbols}|]','',text).replace('  ', ' ').strip()
     return answer
 
 
@@ -107,7 +112,7 @@ def insert_ad(offset, answer, query_text):
 
 class Article:
 
-    def __init__(self, data, callback_data):
+    def __init__(self, data, callback_data, user_id=0, is_mailing=False):
         self.id = data['id']
         self.title = data['title']  
         self.serving = data['serving']
@@ -127,6 +132,9 @@ class Article:
             self.preview = edit_preview(call_data=callback_data, next_photo=False, get_url=True)
 
         self.callback_data = callback_data
+
+        self.is_mailing = is_mailing
+        self.user_id = user_id
     
 
 
@@ -141,9 +149,11 @@ class Article:
 
             {self.ingredients}
 
-            {f'🧾 Как готовить:{br}{self.recipe}'}
+            {f'🧾 Как готовить:{br}{self.recipe}' if not self.is_mailing else f''}
 
-            {hlink(f'📖 Книга рецептов', BOT_URL)}
+
+            {hlink(f'📖 Книга рецептов', BOT_URL) if not self.is_mailing else
+            hlink(f'Рецепт смотрите в боте{br}по кнопке ниже ⬇️{br*3}📖 Книга рецептов', f"{BOT_URL}?start=get_id={self.id}")}
         ''' 
         return message_text.replace(' '*12,'').replace(br*4, br*2) if self.id > 0 else 'Похоже, тут ничего не найдено'
 
@@ -154,6 +164,12 @@ class Article:
         
         markup = InlineKeyboardMarkup(row_width=8)
         
+        if self.is_mailing:
+            markup.add(InlineKeyboardButton(
+                text='Смотерть в боте',
+                url=BOT_URL + f'?start=get_id={self.id}',
+            ))
+            return markup
 
         if not self.callback_data['id'] < 1:
 
@@ -169,7 +185,47 @@ class Article:
             markup.add(get_home_button(text='🏡 На главную'), get_back_to_inline(query_text=self.callback_data['query']))
 
 
-            
+
+
+            # admin mailing
+            if self.user_id == ADMIN_ID:
+                try:
+
+                    all_mailing_dishe = sql(f'SELECT DISTINCT view FROM mailing WHERE dish_id = {self.id}')
+                    all_count_mails = sql(f'SELECT COUNT(*) as count FROM `mailing`')[0]['count']
+
+                    data_mailing = {'text': f'✅ Добавить в рассылку ({all_count_mails})',
+                                    'callback_data': mailing.new(
+                                        dish_id=self.id, 
+                                        add=1,
+                                        query_text=self.callback_data['query']
+                                        )
+                                    } 
+
+                    if all_mailing_dishe:
+                        view = all_mailing_dishe[0]['view']
+                        if not view:
+                            data_mailing = {'text': f'🛑 Убрать из рассылки ({all_count_mails})',
+                                            'callback_data': mailing.new(
+                                                dish_id=self.id,
+                                                add=0,
+                                                query_text=self.callback_data['query']
+                                                )
+                                            }
+                           
+
+                    markup.add(InlineKeyboardButton(**data_mailing))
+
+                except:
+                    pass
+
+
+            # add_mailing = InlineKeyboardButton(
+            #             text='Добавить в рассылку',
+            #             callback_data=add_mailing_menu.new(
+            #                 dish_id=self.id
+            #             )
+            #         )
 
         else:
             markup.add(get_home_button(text='🏡 На главную'), get_back_to_inline(query_text=self.callback_data['query']))
@@ -269,7 +325,7 @@ def get_inline_result(query, data_list, offset, is_personal_chat: bool = False, 
                 answer.append(
                     types.InlineQueryResultArticle(
                         input_message_content = types.InputTextMessageContent(
-                                message_text= f"get_id:{data['id']}|query_text:{query.query}",
+                                message_text= f"get_id={data['id']}|query_text={query.query}",
                                 parse_mode='html',
                             ),
                         
@@ -469,7 +525,7 @@ def edit_preview(article=None, call_data=None, next_photo=False, get_url=False):
 def get_data_dish(id: int):
     if id > 0:
         sql_query = f'''
-        SELECT d.id, d.title, d.original_link, d.serving, d.cooking_time, d.kilocalories,d.protein, d.fats, d.carbohydrates, d.recipe, d.likes,
+        SELECT SQL_CACHE  d.id, d.title, d.original_link, d.serving, d.cooking_time, d.kilocalories,d.protein, d.fats, d.carbohydrates, d.recipe, d.likes,
             GROUP_CONCAT(DISTINCT p.url SEPARATOR "\n") as photos,
             GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') as ingredients,
             GROUP_CONCAT(DISTINCT c.title SEPARATOR ", ") as categories
@@ -539,7 +595,7 @@ def get_data_by_favorites(user_id, start, max_dishes, is_personal_chat: bool = F
 def get_by_category(category_id, start, max_dishes):
 
     sql_query = f'''
-        SELECT d.*,
+        SELECT SQL_CACHE  d.*,
             (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
             (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
             (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
@@ -561,7 +617,7 @@ def get_by_category(category_id, start, max_dishes):
 def get_by_category_min(category_id, start, max_dishes):
 
     sql_query = f'''
-        SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
+        SELECT SQL_CACHE d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
             (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
             (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
         FROM dishes as d 
@@ -579,7 +635,7 @@ def get_data_by_category(query_text, start, max_dishes, is_personal_chat: bool =
     cat_name = query_text.split(filters['category'])[1]
     try:
         category_id = sql(
-            f'SELECT id FROM categories WHERE title LIKE "{cat_name}%" LIMIT 1')[0]['id']
+            f'SELECT SQL_CACHE id FROM categories WHERE title LIKE "{cat_name}%" LIMIT 1')[0]['id']
     except IndexError:
         category_id = 27
 
@@ -591,11 +647,24 @@ def get_data_by_category(query_text, start, max_dishes, is_personal_chat: bool =
     return data_list
 
 
+def get_data_by_mailing(start, max_dishes,  **kwargs):
+    sql_query = f'''
+        SELECT SQL_CACHE 
+        d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
+        (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+        (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
+                
+        FROM dishes as d 
+        WHERE d.id in (select dish_id from mailing where view = 0)
+        ORDER BY d.likes DESC
+        LIMIT {start},{max_dishes}
+        '''
+    return sql(sql_query)
 
 def get_by_query_text(query_text, start, max_dishes):
 
     data_list = sql(
-        f'''SELECT d.*,
+        f'''SELECT SQL_CACHE d.*,
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
                 (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
                 (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
@@ -603,7 +672,7 @@ def get_by_query_text(query_text, start, max_dishes):
         WHERE MATCH (title) AGAINST ("{query_text}") ORDER BY d.likes DESC LIMIT {start},{max_dishes}''')
     if not data_list:
         data_list = sql(
-            f'''SELECT d.*,
+            f'''SELECT SQL_CACHE d.*,
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
                 (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
                 (select  GROUP_CONCAT(DISTINCT CONCAT(i.title,": " ,di.value)) from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
@@ -615,22 +684,23 @@ def get_by_query_text(query_text, start, max_dishes):
 
 def get_by_query_text_min(query_text, start, max_dishes):
     data_list = sql(
-            f'''SELECT  d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
+            f'''SELECT  SQL_CACHE d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
                 (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
             FROM dishes as d 
 
             WHERE MATCH (d.title) AGAINST ("{query_text}")
+            ORDER BY d.title, d.likes DESC
                 LIMIT {start}, {max_dishes}'''
         )
     if not data_list:
         data_list = sql(
             f'''
-            SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories,
+            SELECT SQL_CACHE  d.id, d.title, d.serving, d.cooking_time, d.kilocalories,
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
                 (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
             FROM dishes as d 
-            WHERE title LIKE "%{query_text}%" ORDER BY d.likes DESC
+            WHERE title LIKE "%{query_text}%" ORDER BY d.title, d.likes DESC
             LIMIT {start},{max_dishes}
             ''')
     return data_list
@@ -642,5 +712,73 @@ def get_data_by_query_text(query_text, start, max_dishes, is_personal_chat: bool
     else:
         data_list = get_by_query_text(query_text, start, max_dishes)
     return data_list
+
+
+
+
+
+
+
+def register_user(data):
+    sql_query = f'''INSERT INTO `users`(
+        `user_id`, 
+        `first_name`, 
+        `last_name`, 
+        `full_name`, 
+        `is_premium`, 
+        `is_bot`, 
+        `language_code`, 
+        `language`, 
+        `language_name`, 
+        `mention`,
+        `url`, 
+        `username`) VALUES
+        (
+            {data.from_user.id},
+            "{data.from_user.first_name}",
+            "{data.from_user.last_name}",
+            "{data.from_user.full_name}",
+            {bool(data.from_user.is_premium)},
+            {bool(data.from_user.is_bot)},
+            "{data.from_user.language_code}",
+            "{data.from_user.locale.language}",
+            "{data.from_user.locale.language_name}",
+            "{data.from_user.mention}",
+            "{data.from_user.url}",
+            "{data.from_user.username}"
+        )'''
+
+    sql(sql_query, commit=True)
+
+
+
+
+
+def get_mailing_data():
+    try:
+        mailing_ids = sql(f'SELECT * FROM `mailing` WHERE not view ')
+
+        sql(f'''DELETE FROM mailing WHERE id = {mailing_ids[0]['id']}''', commit=True)
+
+            
+
+        dish_id = mailing_ids[0]['dish_id']
+        call_data = {
+                    'id': dish_id,
+                    'fav': 0,
+                    'query': ' ',
+                    'num_ph': 0,
+                    }
+
+        data = get_data_dish(dish_id)
+        article = Article(data, callback_data=call_data, is_mailing=True)
+
+        return article, len(mailing_ids)
+    except:
+        pass
+
+
+
+
 
 

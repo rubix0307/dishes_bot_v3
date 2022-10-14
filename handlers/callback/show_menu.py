@@ -12,11 +12,12 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
 
     highlight_symbol = '⭐️ '
     menu_name = callback_data['menu_name']
+    user = call.from_user
 
     if call_filters['home'] in menu_name:
 
         text = 'Главное меню'
-        data = get_home_page()
+        data = get_home_page(user.id)
 
         message_data = {
             'text': data['text'],

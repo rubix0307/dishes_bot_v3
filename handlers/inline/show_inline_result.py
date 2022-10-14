@@ -3,11 +3,10 @@ import time
 
 from aiogram import types
 from app import dp
-from functions import (get_blank_data, get_data_by_category, get_data_by_favorites, get_data_by_query_text,
+from functions import (get_blank_data, get_data_by_category, get_data_by_favorites, get_data_by_mailing, get_data_by_query_text,
                        get_inline_result,
                        сleaning_input_text_for_search, сleaning_input_text_from_sql_injection)
 from markups import br, filters
-
 
 @dp.inline_handler()
 async def main(query: types.InlineQuery):
@@ -29,7 +28,6 @@ async def main(query: types.InlineQuery):
         'offset': offset,
         'start': start,
         'is_personal_chat': True if query._values['chat_type'] == 'private' else False,
-        'is_personal': True,
     }
 
     if filters['favorites'] in query.query.lower():
@@ -37,6 +35,9 @@ async def main(query: types.InlineQuery):
 
     elif filters['category'] in query.query:
         data_list = get_data_by_category(**data)
+
+    elif filters['mailing'] in query.query:
+        data_list = get_data_by_mailing(**data)
 
     else:
         data_list = get_data_by_query_text(**data)
@@ -64,10 +65,13 @@ async def main(query: types.InlineQuery):
 
     get_data = time.time()
 
+
+
+    get_fav: bool = filters['favorites'] in query.query.lower()
     answer_data = {
         'results':answer[:50],
-        'cache_time':1,
-        'is_personal': True,
+        'cache_time': 1 if get_fav or data['is_personal_chat'] or filters['mailing'] in query.query else 60*10,
+        'is_personal': get_fav,
         'next_offset': next_offset,
     }
 
