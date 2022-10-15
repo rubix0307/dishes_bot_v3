@@ -41,7 +41,7 @@ async def show_dish(call: types.CallbackQuery, callback_data: dict()):
     elif call_filters['countries'] in menu_name:
         text = 'Кухни разных стран'
         top_categories = sql(
-            f'SELECT title, emoji FROM `categories` WHERE id IN (58,16,31,22,33,71)')
+            f'SELECT title, emoji FROM `categories` WHERE favorite = 1')
         categories = sql(
             'SELECT title, emoji FROM categories WHERE parent_id = 1 AND is_show = 1')
 

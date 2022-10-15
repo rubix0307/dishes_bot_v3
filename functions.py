@@ -8,7 +8,7 @@ from aiogram.types.inline_keyboard import (InlineKeyboardButton,
 from aiogram.utils.markdown import *
 
 from app import bot
-from config import ADMIN_ID, BOT_URL
+from config import ADMIN_ID, BOT_URL, BUY_AD_URL, MEDIA_URL
 from db.functions import (get_categories_data_from_id, get_fav_dish_by_user,
                           get_ingredients_data_from_id,
                           get_photos_data_from_id, sql)
@@ -59,7 +59,7 @@ def get_advertisement(id: int, offset: int, query_text: str) -> types.InlineQuer
         
 
         input_message_content=types.InputTextMessageContent(
-                message_text=f'''{hide_link(data_ad['preview_photo'])}{data_ad['message_text']}'''+ f'''\n{'-'*40}\n{hlink(f'Заказать рекламу в боте', BOT_URL)}''',
+                message_text=f'''{hide_link(data_ad['preview_photo'])}{data_ad['message_text']}'''+ f'''\n{'-'*40}\n{hlink(f'Заказать рекламу в боте', BUY_AD_URL)}''',
                 parse_mode=data_ad['parse_mode'])
         
 
@@ -93,7 +93,7 @@ def get_advertisement(id: int, offset: int, query_text: str) -> types.InlineQuer
             'id': id*-1,
             'title': f'‼️ Ваша реклама ‼️',
             'thumb_url': f'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQ4qwp5h7c3KcNSnOImf64Dz1_bf_6ysZ6tQ&usqp=CAU',
-            'description': f'№ {id}/{offset + 1} | Заказать рекламу можно тут',
+            'description': f'№ стр:{offset + 1} №{id} | Заказать рекламу можно тут',
             'input_message_content': input_message_content
 
         }
@@ -135,14 +135,14 @@ class Article:
 
         self.is_mailing = is_mailing
         self.user_id = user_id
-    
+        self.data = data
 
 
     def get_description(self):
         return f'Порций: {self.serving} | {self.cooking_time} | {self.kilocalories} ккал{br}{self.categories}' if self.id > 0 else '😢'
 
-    def get_message_text(self):
-        message_text = f'''{hide_link(self.preview.replace('c88x88', '900x-')) if self.preview else ''}
+    def get_message_text(self, show_preview: bool = True):
+        message_text = f'''{(hide_link(MEDIA_URL + self.preview.replace('c88x88', '900x-')) if self.preview else '') if show_preview else ''}
             {self.title}
             {self.get_description()}
             {hcode(f'*калорийность для сырых продуктов')}
@@ -321,7 +321,7 @@ def get_inline_result(query, data_list, offset, is_personal_chat: bool = False, 
                 description = f'😢'
 
             try:
-                thumb_url = data['photos'].split('\n')[0].replace('900x-', 'c88x88') if type(data['photos']) == str else (data['photos'][0] if data['photos'] else None)
+                thumb_url = data['photos'].split('\n')[0] if type(data['photos']) == str else (data['photos'][0] if data['photos'] else None)
                 answer.append(
                     types.InlineQueryResultArticle(
                         input_message_content = types.InputTextMessageContent(
@@ -332,7 +332,7 @@ def get_inline_result(query, data_list, offset, is_personal_chat: bool = False, 
 
                         id= data['id'],
                         title= data['title'],
-                        thumb_url= thumb_url,
+                        thumb_url= MEDIA_URL + thumb_url,
                         description= description,
                     
                     )
@@ -494,17 +494,17 @@ def get_alphabet_sort(sorting_list: list):
 
 def edit_preview(article=None, call_data=None, next_photo=False, get_url=False):
     
-        photos = sql(f'''SELECT url FROM photos WHERE dish_id = {call_data['id']}''')
+        photos = sql(f'''SELECT local_photo as url FROM photos WHERE dish_id = {call_data['id']}''')
 
         if next_photo:
             call_data['num_ph'] += 1
         
         try:
-            url = photos[call_data['num_ph']]['url']
+            url = MEDIA_URL + photos[call_data['num_ph']]['url']
         except:
             try:
                 call_data['num_ph'] = 0
-                url = photos[0]['url']
+                url = MEDIA_URL + photos[0]['url']
             except IndexError:
                 url = None
 
@@ -526,22 +526,18 @@ def get_data_dish(id: int):
     if id > 0:
         sql_query = f'''
         SELECT SQL_CACHE  d.id, d.title, d.original_link, d.serving, d.cooking_time, d.kilocalories,d.protein, d.fats, d.carbohydrates, d.recipe, d.likes,
-            GROUP_CONCAT(DISTINCT p.url SEPARATOR "\n") as photos,
-            GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') as ingredients,
-            GROUP_CONCAT(DISTINCT c.title SEPARATOR ", ") as categories
-        FROM dishes as d
-
-        LEFT JOIN photos as p ON d.id = p.dish_id
+            (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
+            (select GROUP_CONCAT(p.local_photo SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+            (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i 
+            INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id
+            ) as ingredients
         
-        LEFT JOIN dishes_categories as dc ON d.id = dc.dish_id
-        LEFT JOIN categories as c ON c.id = dc.category_id
-
-        LEFT JOIN dishes_ingredients as di ON d.id = di.dish_id
-        LEFT JOIN ingredients as i ON di.ingredient_id = i.id
+        FROM dishes as d
 
         WHERE d.id = {id}
         '''
-        return sql(sql_query)[0]
+        answer = sql(sql_query)[0]
+        return answer
     else:
         return get_blank_data(id=id)[0]
 
@@ -558,7 +554,7 @@ def get_by_favorites(user_id, start, max_dishes):
     sql_query = f'''
     SELECT d.*,
         (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-        (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+        (select GROUP_CONCAT(p.local_photo SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
         (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
     FROM dishes as d
 
@@ -573,7 +569,7 @@ def get_by_favorites_min(user_id, start, max_dishes):
     sql_query = f'''
     SELECT d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
         (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-        (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
+        (select p.local_photo from photos as p where p.dish_id=d.id limit 1) as photos
     FROM dishes as d 
     WHERE d.id in (select dish_id from fav_dish_user where user_id = {user_id})
     ORDER BY d.likes DESC
@@ -597,7 +593,7 @@ def get_by_category(category_id, start, max_dishes):
     sql_query = f'''
         SELECT SQL_CACHE  d.*,
             (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-            (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+            (select GROUP_CONCAT(p.local_photo SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
             (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
         FROM dishes as d
 
@@ -619,7 +615,7 @@ def get_by_category_min(category_id, start, max_dishes):
     sql_query = f'''
         SELECT SQL_CACHE d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
             (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-            (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
+            (select p.local_photo from photos as p where p.dish_id=d.id limit 1) as photos
         FROM dishes as d 
         WHERE d.id in (select dish_id from dishes_categories where category_id = {category_id})
         ORDER BY d.likes DESC
@@ -652,7 +648,7 @@ def get_data_by_mailing(start, max_dishes,  **kwargs):
         SELECT SQL_CACHE 
         d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
         (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-        (select p.url from photos as p where p.dish_id=d.id limit 1) as photos
+        (select p.local_photo from photos as p where p.dish_id=d.id limit 1) as photos
                 
         FROM dishes as d 
         WHERE d.id in (select dish_id from mailing where view = 0)
@@ -666,7 +662,7 @@ def get_by_query_text(query_text, start, max_dishes):
     data_list = sql(
         f'''SELECT SQL_CACHE d.*,
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-                (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+                (select GROUP_CONCAT(p.local_photo SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
                 (select GROUP_CONCAT(DISTINCT CONCAT(i.title,": ", di.value) SEPARATOR '\n') from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
         FROM dishes as d
         WHERE MATCH (title) AGAINST ("{query_text}") ORDER BY d.likes DESC LIMIT {start},{max_dishes}''')
@@ -674,7 +670,7 @@ def get_by_query_text(query_text, start, max_dishes):
         data_list = sql(
             f'''SELECT SQL_CACHE d.*,
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-                (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
+                (select GROUP_CONCAT(p.local_photo SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos,
                 (select  GROUP_CONCAT(DISTINCT CONCAT(i.title,": " ,di.value)) from ingredients as i INNER JOIN dishes_ingredients as di ON di.ingredient_id = i.id where di.dish_id=d.id) as ingredients
 
             FROM dishes as d
@@ -686,7 +682,7 @@ def get_by_query_text_min(query_text, start, max_dishes):
     data_list = sql(
             f'''SELECT  SQL_CACHE d.id, d.title, d.serving, d.cooking_time, d.kilocalories, 
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-                (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
+                (select GROUP_CONCAT(p.local_photo SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
             FROM dishes as d 
 
             WHERE MATCH (d.title) AGAINST ("{query_text}")
@@ -698,7 +694,7 @@ def get_by_query_text_min(query_text, start, max_dishes):
             f'''
             SELECT SQL_CACHE  d.id, d.title, d.serving, d.cooking_time, d.kilocalories,
                 (select GROUP_CONCAT(c.title SEPARATOR ', ') from categories as c INNER JOIN dishes_categories as dc ON c.id=dc.category_id where dc.dish_id=d.id) as categories,
-                (select GROUP_CONCAT(p.url SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
+                (select GROUP_CONCAT(p.local_photo SEPARATOR '\n') from photos as p where p.dish_id=d.id) as photos
             FROM dishes as d 
             WHERE title LIKE "%{query_text}%" ORDER BY d.title, d.likes DESC
             LIMIT {start},{max_dishes}

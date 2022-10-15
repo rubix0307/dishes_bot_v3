@@ -3,7 +3,6 @@ import os
 import time
 import requests
 from db.functions import sql
-from threading import Thread
 
 def transliterate(name):
    """
@@ -63,7 +62,7 @@ for id in range(1,10000):
             name = sql(f'SELECT title FROM dishes WHERE id = {id}')[0]['title']
             transl_name = f'{transliterate(name)}-{round+1}.{url.split(".")[-1]}'
 
-            folder_path = f'images/{folder_num}/'
+            folder_path = f'/var/www/admin/www/obertivanie.com/tg_images/{folder_num}/'
             
             if not os.path.exists(f'{folder_path}/{transl_name}'):
                 is_download = download_photo(url, folder_path, transl_name)

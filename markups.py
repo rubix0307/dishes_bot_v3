@@ -29,7 +29,7 @@ set_photo_call_menu.prefix = 'set_ph'
 
 
 filters = {
-    'favorites': 'favorites',
+    'favorites': 'избранное',
     'top-day': 'top-day',
     'category': 'Категория=',
     'mailing': 'mailing',
